@@ -128,9 +128,9 @@ export const fights: Fight[] = [
     fighterA: byId(1),
     fighterB: byId(4),
     winnerId: 1,
-    scoreA: 87,
-    scoreB: 54,
-    bet: { on: 1, amount: 25, outcome: "gain", delta: 50 },
+    pvA: 42,
+    pvB: 0,
+    bet: { on: 1, amount: 25, cote: 1.5, outcome: "gain", delta: 38 },
     createdAt: "2026-09-08T20:14:00",
   },
   {
@@ -138,9 +138,9 @@ export const fights: Fight[] = [
     fighterA: byId(3),
     fighterB: byId(2),
     winnerId: 2,
-    scoreA: 68,
-    scoreB: 72,
-    bet: { on: 3, amount: 20, outcome: "perte", delta: -20 },
+    pvA: 0,
+    pvB: 31,
+    bet: { on: 3, amount: 20, cote: 2.62, outcome: "perte", delta: -20 },
     createdAt: "2026-09-08T19:02:00",
   },
   {
@@ -148,9 +148,9 @@ export const fights: Fight[] = [
     fighterA: byId(6),
     fighterB: byId(7),
     winnerId: null,
-    scoreA: 70,
-    scoreB: 70,
-    bet: { on: "nul", amount: 15, outcome: "gain", delta: 45 },
+    pvA: 0,
+    pvB: 0,
+    bet: { on: "nul", amount: 15, cote: 11.57, outcome: "gain", delta: 174 },
     createdAt: "2026-09-07T18:41:00",
   },
   {
@@ -158,9 +158,9 @@ export const fights: Fight[] = [
     fighterA: byId(5),
     fighterB: byId(8),
     winnerId: 5,
-    scoreA: 81,
-    scoreB: 49,
-    bet: { on: 8, amount: 30, outcome: "perte", delta: -30 },
+    pvA: 55,
+    pvB: 0,
+    bet: { on: 8, amount: 30, cote: 2.61, outcome: "perte", delta: -30 },
     createdAt: "2026-09-07T17:26:00",
   },
   {
@@ -168,9 +168,9 @@ export const fights: Fight[] = [
     fighterA: byId(2),
     fighterB: byId(6),
     winnerId: 6,
-    scoreA: 61,
-    scoreB: 79,
-    bet: { on: 6, amount: 40, outcome: "gain", delta: 80 },
+    pvA: 0,
+    pvB: 19,
+    bet: { on: 6, amount: 40, cote: 2.18, outcome: "gain", delta: 87 },
     createdAt: "2026-09-06T21:10:00",
   },
 ];
@@ -196,10 +196,10 @@ export const currentPlayer: Player = players[0];
 export const mockResult = {
   fighterA: byId(1),
   fighterB: byId(4),
-  scoreA: 87,
-  scoreB: 54,
+  pvA: 42,
+  pvB: 0,
   winnerId: 1,
-  bet: { amount: 25, delta: 50 },
+  bet: { amount: 25, cote: 1.5, delta: 38 },
 };
 
 /** Format d'affichage des dates : 08/09/2026 · 20:14 */

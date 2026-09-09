@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 import { currentPlayer } from "@/lib/mock-data";
+import { useGame } from "@/lib/game-store";
 
 const NAV_LINKS = [
   { href: "/", label: "Accueil" },
@@ -18,6 +19,7 @@ const NAV_LINKS = [
 export function SiteHeader() {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { points } = useGame();
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -65,12 +67,15 @@ export function SiteHeader() {
         </nav>
 
         {/* Compteur de points du joueur, façon jetons d'arcade */}
-        <p className="ml-auto hidden items-center gap-2 border border-edge bg-panel px-3 py-1.5 sm:flex lg:ml-4">
+        <p
+          className="ml-auto hidden items-center gap-2 border border-edge bg-panel px-3 py-1.5 sm:flex lg:ml-4"
+          aria-live="polite"
+        >
           <span aria-hidden="true" className="text-arcade-gold">
             &#9670;
           </span>
-          <span className="font-mono text-sm font-bold text-arcade-gold">
-            {currentPlayer.points.toLocaleString("fr-FR")}
+          <span className="font-mono text-sm font-bold text-arcade-gold" suppressHydrationWarning>
+            {points.toLocaleString("fr-FR")}
           </span>
           <span className="sr-only">points disponibles</span>
           <span aria-hidden="true" className="font-mono text-[10px] tracking-widest text-white/50">
@@ -132,8 +137,12 @@ export function SiteHeader() {
             );
           })}
         </ul>
-        <p className="mx-auto flex max-w-6xl items-center gap-2 px-6 pb-4 font-mono text-sm text-arcade-gold">
-          &#9670; {currentPlayer.points.toLocaleString("fr-FR")} points
+        <p
+          className="mx-auto flex max-w-6xl items-center gap-2 px-6 pb-4 font-mono text-sm text-arcade-gold"
+          aria-live="polite"
+        >
+          &#9670;{" "}
+          <span suppressHydrationWarning>{points.toLocaleString("fr-FR")}</span> points
         </p>
       </nav>
 

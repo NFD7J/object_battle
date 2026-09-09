@@ -1,39 +1,39 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
 
 import { CombatantPortrait } from "@/components/combatant-card";
-import { FightRow } from "@/components/fight-row";
+import { HistoryList } from "@/components/history-list";
 import { PlayerAvatar } from "@/components/ranking-table";
 import { Panel, PageHeader, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
-import { combatants, currentPlayer, fights, players } from "@/lib/mock-data";
+import { useJoueur, useJoueurs } from "@/lib/game-store";
+import { combatants } from "@/lib/mock-data";
 
-import { ProfilView } from "@/app/profil/profil-view";
+export function ProfilView() {
+  const joueur = useJoueur();
+  const joueurs = useJoueurs();
 
-export const metadata: Metadata = {
-  title: "Profil",
-  description:
-    "Votre profil Object Battle : points, victoires, taux de réussite, position au classement et derniers combats.",
-};
-
-export default function ProfilPage() {
   const rang =
-    [...players].sort((a, b) => b.points - a.points).findIndex(
-      (player) => player.id === currentPlayer.id,
+    [...joueurs].sort((a, b) => b.points - a.points).findIndex(
+      (player) => player.id === joueur.id,
     ) + 1;
 
-  const tauxVictoire = Math.round(
-    (currentPlayer.nbVictoires / currentPlayer.nbCombats) * 100,
-  );
+  const tauxVictoire =
+    joueur.nbCombats === 0
+      ? 0
+      : Math.round((joueur.nbVictoires / joueur.nbCombats) * 100);
 
-  const derniersCombats = fights.slice(0, 3);
   const objetsFavoris = combatants.slice(0, 3);
 
   const chiffres = [
-    { label: "Points", valeur: currentPlayer.points.toLocaleString("fr-FR"), couleur: "text-arcade-gold" },
-    { label: "Record", valeur: currentPlayer.maxPoints.toLocaleString("fr-FR"), couleur: "text-arcade-cyan" },
-    { label: "Victoires", valeur: currentPlayer.nbVictoires, couleur: "text-victory" },
-    { label: "Combats", valeur: currentPlayer.nbCombats, couleur: "text-white" },
+    { label: "Points", valeur: joueur.points.toLocaleString("fr-FR"), couleur: "text-arcade-gold" },
+    { label: "Record", valeur: joueur.maxPoints.toLocaleString("fr-FR"), couleur: "text-arcade-cyan" },
+    { label: "Victoires", valeur: joueur.nbVictoires, couleur: "text-victory" },
+    { label: "Combats", valeur: joueur.nbCombats, couleur: "text-white" },
   ];
+
+  const progression =
+    joueur.maxPoints === 0 ? 0 : Math.round((joueur.points / joueur.maxPoints) * 100);
 
   return (
     <>
@@ -44,21 +44,18 @@ export default function ProfilPage() {
       />
 
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-        {/* ---------------------------------------------------------------- */}
-        {/* Carte de joueur                                                   */}
-        {/* ---------------------------------------------------------------- */}
         <Panel tone="violet" innerClassName="relative overflow-hidden">
           <div aria-hidden="true" className="arena-grid absolute inset-0 opacity-40" />
 
           <div className="relative flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:p-8">
-            <PlayerAvatar player={currentPlayer} size={88} />
+            <PlayerAvatar player={joueur} size={88} />
 
             <div className="min-w-0 flex-1">
               <Tag className="bg-arcade-violet/25 text-arcade-cyan">
-                Membre depuis {currentPlayer.createdAt}
+                Membre depuis {joueur.createdAt}
               </Tag>
               <h2 className="skew-title mt-3 text-4xl leading-none sm:text-5xl">
-                {currentPlayer.username}
+                {joueur.username}
               </h2>
               <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/70">
                 <span>
@@ -82,9 +79,6 @@ export default function ProfilPage() {
           </div>
         </Panel>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Chiffres clés                                                     */}
-        {/* ---------------------------------------------------------------- */}
         <section aria-labelledby="titre-chiffres" className="mt-10">
           <h2 id="titre-chiffres" className="sr-only">
             Statistiques du joueur
@@ -104,23 +98,20 @@ export default function ProfilPage() {
             ))}
           </dl>
 
-          {/* Barre de progression vers le record personnel */}
           <Panel className="mt-3" innerClassName="p-5">
             <div className="flex items-baseline justify-between gap-3">
               <h3 className="font-mono text-[11px] tracking-[0.14em] text-white/50 uppercase">
                 Progression vers le record
               </h3>
               <p className="font-mono text-sm text-white/70 tabular-nums">
-                {currentPlayer.points.toLocaleString("fr-FR")} /{" "}
-                {currentPlayer.maxPoints.toLocaleString("fr-FR")}
+                {joueur.points.toLocaleString("fr-FR")} /{" "}
+                {joueur.maxPoints.toLocaleString("fr-FR")}
               </p>
             </div>
             <div className="relative mt-3 h-3 border border-edge bg-void">
               <div
                 className="h-full bg-linear-to-r from-arcade-violet to-arcade-cyan"
-                style={{
-                  width: `${Math.round((currentPlayer.points / currentPlayer.maxPoints) * 100)}%`,
-                }}
+                style={{ width: `${Math.min(100, progression)}%` }}
               />
               <div
                 aria-hidden="true"
@@ -130,9 +121,6 @@ export default function ProfilPage() {
           </Panel>
         </section>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Objets favoris                                                    */}
-        {/* ---------------------------------------------------------------- */}
         <section className="mt-12">
           <SectionTitle href="/objets" linkLabel="Tout le roster">
             Objets les plus joués
@@ -162,23 +150,13 @@ export default function ProfilPage() {
           </ul>
         </section>
 
-        {/* ---------------------------------------------------------------- */}
-        {/* Derniers combats                                                  */}
-        {/* ---------------------------------------------------------------- */}
         <section className="mt-12">
           <SectionTitle href="/historique" linkLabel="Tout l'historique">
             Mes derniers combats
           </SectionTitle>
-          <ul className="grid gap-3">
-            {derniersCombats.map((fight) => (
-              <li key={fight.id}>
-                <FightRow fight={fight} compact />
-              </li>
-            ))}
-          </ul>
+          <HistoryList compact limit={3} filtres={false} />
         </section>
       </div>
     </>
   );
-  return <ProfilView />;
 }

@@ -59,12 +59,20 @@ export type Fight = {
   id: number;
   fighterA: Combatant;
   fighterB: Combatant;
-  /** `null` en cas de match nul. */
+  /** `null` en cas de match nul (double K.O.). */
   winnerId: number | null;
-  scoreA: number;
-  scoreB: number;
-  /** Points misés puis gagnés (+) ou perdus (-) par l'utilisateur. */
-  bet: { on: number | "nul"; amount: number; outcome: BetOutcome; delta: number };
+  /** PV restants du combattant A à la fin (0 = K.O.). */
+  pvA: number;
+  /** PV restants du combattant B à la fin (0 = K.O.). */
+  pvB: number;
+  /** Points misés, cote retenue, puis gagnés (+) ou perdus (-) par l'utilisateur. */
+  bet: {
+    on: number | "nul";
+    amount: number;
+    cote: number;
+    outcome: BetOutcome;
+    delta: number;
+  };
   createdAt: string;
 };
 

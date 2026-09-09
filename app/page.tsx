@@ -1,9 +1,8 @@
 import Link from "next/link";
 
-import { FightRow } from "@/components/fight-row";
-import { PlayerAvatar } from "@/components/ranking-table";
+import { HeroStats, TopPlayersPanel } from "@/components/game-live";
+import { HistoryList } from "@/components/history-list";
 import { Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
-import { combatants, fights, players } from "@/lib/mock-data";
 
 const ETAPES = [
   {
@@ -27,9 +26,6 @@ const ETAPES = [
 ];
 
 export default function AccueilPage() {
-  const derniersCombats = fights.slice(0, 3);
-  const topJoueurs = [...players].sort((a, b) => b.points - a.points).slice(0, 4);
-
   return (
     <>
       {/* ------------------------------------------------------------------ */}
@@ -71,79 +67,12 @@ export default function AccueilPage() {
               </Link>
             </div>
 
-            <dl className="mt-10 grid max-w-lg grid-cols-3 gap-3">
-              {[
-                { valeur: combatants.length, label: "Objets" },
-                { valeur: fights.length, label: "Combats" },
-                { valeur: players.length, label: "Joueurs" },
-              ].map((item) => (
-                <div
-                  key={item.label}
-                  className="cut-corner-sm border border-edge bg-panel/80 px-4 py-3"
-                >
-                  <dt className="font-mono text-[10px] tracking-[0.16em] text-white/50 uppercase">
-                    {item.label}
-                  </dt>
-                  <dd className="font-display text-3xl leading-none text-arcade-gold tabular-nums">
-                    {item.valeur}
-                  </dd>
-                </div>
-              ))}
-            </dl>
+            <HeroStats />
           </div>
 
           {/* Aperçu du classement */}
           <div className="relative">
-            <Panel tone="violet" innerClassName="relative overflow-hidden p-6 sm:p-8">
-              <div aria-hidden="true" className="arena-grid absolute inset-0 opacity-60" />
-
-              <div className="relative flex items-center justify-between gap-3">
-                <p className="font-mono text-[11px] tracking-[0.3em] text-arcade-cyan uppercase">
-                  Classement
-                </p>
-                <Link
-                  href="/classement"
-                  className="font-mono text-[11px] tracking-[0.14em] text-arcade-cyan uppercase underline-offset-4 hover:underline"
-                >
-                  Voir tout →
-                </Link>
-              </div>
-
-              <h2 className="skew-title relative mt-3 text-3xl">Meilleurs joueurs</h2>
-
-              <ol className="relative mt-5 grid gap-2.5">
-                {topJoueurs.map((player, index) => (
-                  <li
-                    key={player.id}
-                    className="cut-corner-sm flex items-center gap-3 border border-edge bg-panel/80 px-3 py-2.5"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="w-5 font-display text-2xl leading-none text-arcade-violet tabular-nums"
-                    >
-                      {index + 1}
-                    </span>
-                    <PlayerAvatar player={player} size={36} />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-display text-lg leading-tight text-white">
-                        {player.username}
-                      </span>
-                      <span className="block font-mono text-[11px] text-white/50">
-                        {player.nbVictoires} victoires
-                      </span>
-                    </span>
-                    <span className="text-right">
-                      <span className="block font-mono text-base font-bold text-arcade-gold tabular-nums">
-                        {player.points.toLocaleString("fr-FR")}
-                      </span>
-                      <span className="block font-mono text-[9px] tracking-widest text-white/40 uppercase">
-                        points
-                      </span>
-                    </span>
-                  </li>
-                ))}
-              </ol>
-            </Panel>
+            <TopPlayersPanel />
           </div>
         </div>
       </section>
@@ -179,13 +108,7 @@ export default function AccueilPage() {
           <SectionTitle href="/historique" linkLabel="Tout l'historique">
             Derniers combats
           </SectionTitle>
-          <ul className="grid gap-3">
-            {derniersCombats.map((fight) => (
-              <li key={fight.id}>
-                <FightRow fight={fight} compact />
-              </li>
-            ))}
-          </ul>
+          <HistoryList compact limit={3} filtres={false} />
         </div>
       </section>
 

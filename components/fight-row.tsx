@@ -1,7 +1,9 @@
 import Link from "next/link";
 
 import { CombatantPortrait } from "@/components/combatant-card";
+import { HealthBar } from "@/components/health-bar";
 import { Panel, Tag } from "@/components/ui";
+import { formatCote } from "@/lib/fight-engine";
 import { formatFightDate } from "@/lib/mock-data";
 import type { Combatant, Fight } from "@/lib/types";
 
@@ -13,7 +15,7 @@ function winnerOf(fight: Fight): Combatant | null {
 
 /** Bandeau de gain ou de perte : couleur + flèche + mot, jamais la couleur seule. */
 export function BetResult({ fight }: { fight: Fight }) {
-  const { outcome, delta, amount } = fight.bet;
+  const { outcome, delta, amount, cote } = fight.bet;
 
   const styles = {
     gain: { className: "bg-victory/15 text-victory", arrow: "\u25B2", label: "Gain" },
@@ -22,20 +24,25 @@ export function BetResult({ fight }: { fight: Fight }) {
   }[outcome];
 
   return (
-    <span
-      className={`flex -skew-x-6 items-center gap-2 px-3 py-1.5 ${styles.className}`}
-    >
-      <span aria-hidden="true" className="skew-x-6 text-xs">
-        {styles.arrow}
+    <div className="flex flex-col items-start gap-1.5 sm:items-end">
+      <span
+        className={`flex -skew-x-6 items-center gap-2 px-3 py-1.5 ${styles.className}`}
+      >
+        <span aria-hidden="true" className="skew-x-6 text-xs">
+          {styles.arrow}
+        </span>
+        <span className="skew-x-6 font-mono text-xs tracking-wider uppercase">
+          {styles.label}
+        </span>
+        <span className="skew-x-6 font-display text-lg leading-none tabular-nums">
+          {delta > 0 ? `+${delta}` : delta}
+        </span>
+        <span className="sr-only">points, pour une mise de {amount} points</span>
       </span>
-      <span className="skew-x-6 font-mono text-xs tracking-wider uppercase">
-        {styles.label}
+      <span className="font-mono text-[11px] text-white/40">
+        {amount} pts × {formatCote(cote)}
       </span>
-      <span className="skew-x-6 font-display text-lg leading-none tabular-nums">
-        {delta > 0 ? `+${delta}` : delta}
-      </span>
-      <span className="sr-only">points, pour une mise de {amount} points</span>
-    </span>
+    </div>
   );
 }
 
@@ -92,16 +99,18 @@ export function FightRow({ fight, compact = false }: { fight: Fight; compact?: b
               </span>
             ) : (
               <span className="text-draw">
-                <span aria-hidden="true">&#9776;</span> Match nul
+                <span aria-hidden="true">&#9776;</span> Double K.O.
               </span>
             )}
-            <span className="font-mono text-white/70 tabular-nums">
-              {fight.scoreA} / {fight.scoreB}
-            </span>
           </p>
 
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <HealthBar pv={fight.pvA} size="sm" nom={fight.fighterA.name} />
+            <HealthBar pv={fight.pvB} size="sm" nom={fight.fighterB.name} />
+          </div>
+
           {!compact ? (
-            <p className="mt-2">
+            <p className="mt-3">
               <Tag className="bg-panel-soft text-white/50">
                 <time dateTime={fight.createdAt}>{formatFightDate(fight.createdAt)}</time>
               </Tag>
