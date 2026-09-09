@@ -1,26 +1,167 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ==========================================================================
+   OBJECT BATTLE — Système de design « borne d'arcade / jeu de combat »
+   Palette : violet + bleu (principale), orange (secondaire),
+             vert (victoire), rouge (défaite), sur fond sombre.
+   ========================================================================== */
+
+@theme {
+  /* Fonds */
+  --color-void: #06040d;
+  --color-abyss: #0b0717;
+  --color-panel: #150d28;
+  --color-panel-soft: #1e1338;
+  --color-edge: #372259;
+
+  /* Couleurs de marque */
+  --color-arcade-violet: #a855f7;
+  --color-arcade-blue: #5b83ff;
+  --color-arcade-cyan: #22d3ee;
+  --color-arcade-orange: #ff8a1f;
+  --color-arcade-gold: #ffc53d;
+
+  /* États de combat */
+  --color-victory: #34d399;
+  --color-defeat: #ff5069;
+  --color-draw: #a5b4c8;
+
+  /* Typographie */
+  --font-display: var(--font-anton), "Arial Narrow", "Haettenschweiler", sans-serif;
+  --font-sans: var(--font-geist-sans), system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Animations */
+  --animate-glow: glow 2.6s ease-in-out infinite;
+  --animate-float: float 5s ease-in-out infinite;
+  --animate-clash-left: clash-left 2.4s ease-in-out infinite;
+  --animate-clash-right: clash-right 2.4s ease-in-out infinite;
+  --animate-flicker: flicker 4s linear infinite;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@keyframes glow {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 12px currentColor); }
+  50% { opacity: 0.75; filter: drop-shadow(0 0 26px currentColor); }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes clash-left {
+  0%, 100% { transform: translateX(0) rotate(-3deg); }
+  45% { transform: translateX(14px) rotate(4deg); }
+  55% { transform: translateX(10px) rotate(2deg); }
+}
+
+@keyframes clash-right {
+  0%, 100% { transform: translateX(0) rotate(3deg); }
+  45% { transform: translateX(-14px) rotate(-4deg); }
+  55% { transform: translateX(-10px) rotate(-2deg); }
+}
+
+@keyframes flicker {
+  0%, 92%, 100% { opacity: 1; }
+  94% { opacity: 0.55; }
+  96% { opacity: 1; }
+  98% { opacity: 0.7; }
+}
+
+/* --------------------------------------------------------------------------
+   Utilitaires maison
+   -------------------------------------------------------------------------- */
+
+/* Panneau à coins biseautés, façon HUD de jeu de combat */
+@utility cut-corner {
+  clip-path: polygon(
+    18px 0,
+    100% 0,
+    100% calc(100% - 18px),
+    calc(100% - 18px) 100%,
+    0 100%,
+    0 18px
+  );
+}
+
+@utility cut-corner-sm {
+  clip-path: polygon(
+    10px 0,
+    100% 0,
+    100% calc(100% - 10px),
+    calc(100% - 10px) 100%,
+    0 100%,
+    0 10px
+  );
+}
+
+/* Étiquette en parallélogramme (badges, onglets) */
+@utility tag-slant {
+  clip-path: polygon(9px 0, 100% 0, calc(100% - 9px) 100%, 0 100%);
+}
+
+/* Titre incliné « versus » */
+@utility skew-title {
+  transform: skewX(-7deg);
+}
+
+/* Fines lignes horizontales, façon écran cathodique */
+@utility scanlines {
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.045) 0px,
+    rgba(255, 255, 255, 0.045) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+}
+
+/* Grille de perspective en fond d'arène */
+@utility arena-grid {
+  background-image:
+    linear-gradient(to right, rgba(168, 85, 247, 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(91, 131, 255, 0.16) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-void);
+    color: #ece7f7;
+    font-family: var(--font-sans);
+  }
+
+  /* Titres du jeu : condensé, majuscules, légèrement penché */
+  h1, h2, h3 {
+    font-family: var(--font-display);
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  /* Accessibilité : focus toujours visible et contrasté */
+  :focus-visible {
+    outline: 3px solid var(--color-arcade-gold);
+    outline-offset: 3px;
+  }
+
+  ::selection {
+    background: var(--color-arcade-violet);
+    color: #fff;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* Respect des préférences système : on coupe les animations décoratives */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
