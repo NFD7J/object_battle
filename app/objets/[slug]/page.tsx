@@ -205,40 +205,7 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
             </Panel>
           )}
         </div>
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Adversaires suggérés                                                */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
-        <SectionTitle href="/objets" linkLabel="Tout le roster">
-          Adversaires possibles
-        </SectionTitle>
-
-        <ul className="grid gap-3 sm:grid-cols-3">
-          {autresObjets.map((autre) => (
-            <li key={autre.id}>
-              <Link href={`/objets/${autre.slug}`} className="block">
-                <Panel innerClassName="flex items-center gap-4 p-4 transition-colors hover:bg-panel-soft">
-                  <CombatantPortrait
-                    combatant={autre}
-                    className="cut-corner-sm h-16 w-16 shrink-0"
-                    sizes="64px"
-                  />
-                  <span>
-                    <span className="block font-display text-xl text-white">
-                      {autre.name}
-                    </span>
-                    <span className="block font-mono text-xs text-arcade-gold">
-                      Score {autre.overall}
-                    </span>
-                  </span>
-                </Panel>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
+      </section> 
     </>
   );
 }
