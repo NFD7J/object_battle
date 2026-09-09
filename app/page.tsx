@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { CombatantPortrait } from "@/components/combatant-card";
 import { FightRow } from "@/components/fight-row";
 import { PlayerAvatar } from "@/components/ranking-table";
 import { Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
@@ -28,8 +27,6 @@ const ETAPES = [
 ];
 
 export default function AccueilPage() {
-  const vedetteA = combatants[0];
-  const vedetteB = combatants[3];
   const derniersCombats = fights.slice(0, 3);
   const topJoueurs = [...players].sort((a, b) => b.points - a.points).slice(0, 4);
 
@@ -95,49 +92,57 @@ export default function AccueilPage() {
             </dl>
           </div>
 
-          {/* Aperçu d'arène : deux objets qui se percutent */}
+          {/* Aperçu du classement */}
           <div className="relative">
             <Panel tone="violet" innerClassName="relative overflow-hidden p-6 sm:p-8">
               <div aria-hidden="true" className="arena-grid absolute inset-0 opacity-60" />
-              <p className="relative text-center font-mono text-[11px] tracking-[0.3em] text-arcade-cyan uppercase">
-                Combat de démonstration
-              </p>
 
-              <div className="relative mt-6 flex items-center justify-between gap-2">
-                <div className="flex-1 animate-clash-left">
-                  <CombatantPortrait
-                    combatant={vedetteA}
-                    className="cut-corner-sm mx-auto h-32 w-32 sm:h-40 sm:w-40"
-                    sizes="160px"
-                    priority
-                  />
-                  <p className="mt-3 text-center font-display text-xl">{vedetteA.name}</p>
-                </div>
-
-                <p
-                  aria-hidden="true"
-                  className="skew-title animate-glow font-display text-4xl text-arcade-orange sm:text-5xl"
-                >
-                  VS
+              <div className="relative flex items-center justify-between gap-3">
+                <p className="font-mono text-[11px] tracking-[0.3em] text-arcade-cyan uppercase">
+                  Classement
                 </p>
-
-                <div className="flex-1 animate-clash-right">
-                  <CombatantPortrait
-                    combatant={vedetteB}
-                    className="cut-corner-sm mx-auto h-32 w-32 sm:h-40 sm:w-40"
-                    sizes="160px"
-                    priority
-                  />
-                  <p className="mt-3 text-center font-display text-xl">{vedetteB.name}</p>
-                </div>
+                <Link
+                  href="/classement"
+                  className="font-mono text-[11px] tracking-[0.14em] text-arcade-cyan uppercase underline-offset-4 hover:underline"
+                >
+                  Voir tout →
+                </Link>
               </div>
 
-              <p className="relative mt-6 border-t border-edge pt-4 text-center text-sm text-white/60">
-                Score global{" "}
-                <strong className="font-mono text-arcade-gold">{vedetteA.overall}</strong>{" "}
-                contre{" "}
-                <strong className="font-mono text-arcade-gold">{vedetteB.overall}</strong>
-              </p>
+              <h2 className="skew-title relative mt-3 text-3xl">Meilleurs joueurs</h2>
+
+              <ol className="relative mt-5 grid gap-2.5">
+                {topJoueurs.map((player, index) => (
+                  <li
+                    key={player.id}
+                    className="cut-corner-sm flex items-center gap-3 border border-edge bg-panel/80 px-3 py-2.5"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="w-5 font-display text-2xl leading-none text-arcade-violet tabular-nums"
+                    >
+                      {index + 1}
+                    </span>
+                    <PlayerAvatar player={player} size={36} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-display text-lg leading-tight text-white">
+                        {player.username}
+                      </span>
+                      <span className="block font-mono text-[11px] text-white/50">
+                        {player.nbVictoires} victoires
+                      </span>
+                    </span>
+                    <span className="text-right">
+                      <span className="block font-mono text-base font-bold text-arcade-gold tabular-nums">
+                        {player.points.toLocaleString("fr-FR")}
+                      </span>
+                      <span className="block font-mono text-[9px] tracking-widest text-white/40 uppercase">
+                        points
+                      </span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
             </Panel>
           </div>
         </div>
@@ -182,44 +187,6 @@ export default function AccueilPage() {
             ))}
           </ul>
         </div>
-      </section>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Aperçu du classement                                                */}
-      {/* ------------------------------------------------------------------ */}
-      <section className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
-        <SectionTitle href="/classement" linkLabel="Classement complet">
-          Meilleurs joueurs
-        </SectionTitle>
-
-        <ol className="grid gap-3 sm:grid-cols-2">
-          {topJoueurs.map((player, index) => (
-            <li key={player.id}>
-              <Panel innerClassName="flex items-center gap-4 p-4">
-                <span className="font-display text-3xl leading-none text-arcade-violet tabular-nums">
-                  {index + 1}
-                </span>
-                <PlayerAvatar player={player} size={44} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-display text-xl text-white">
-                    {player.username}
-                  </span>
-                  <span className="block font-mono text-xs text-white/50">
-                    {player.nbVictoires} victoires
-                  </span>
-                </span>
-                <span className="text-right">
-                  <span className="block font-mono text-lg font-bold text-arcade-gold tabular-nums">
-                    {player.points.toLocaleString("fr-FR")}
-                  </span>
-                  <span className="block font-mono text-[10px] tracking-widest text-white/40 uppercase">
-                    points
-                  </span>
-                </span>
-              </Panel>
-            </li>
-          ))}
-        </ol>
       </section>
 
       {/* ------------------------------------------------------------------ */}
