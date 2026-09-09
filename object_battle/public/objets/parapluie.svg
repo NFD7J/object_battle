@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Parapluie">
+  <rect x="94" y="86" width="12" height="82" fill="#dfd6f2"/>
+  <path d="M94 168v6a14 14 0 0 0 28 0" fill="none" stroke="#dfd6f2" stroke-width="12" stroke-linecap="round"/>
+  <path d="M18 92a82 82 0 0 1 164 0z" fill="#6d3ff2"/>
+  <path d="M18 92a82 82 0 0 1 41-71 82 82 0 0 0-14 71z" fill="#8f6bff"/>
+  <path d="M100 10a82 82 0 0 1 41 82 82 82 0 0 0-14-82z" fill="#8f6bff"/>
+  <path d="M18 92q20 16 41 0 20 16 41 0 20 16 41 0 20 16 41 0" fill="none" stroke="#2a1758" stroke-width="6"/>
+  <rect x="96" y="4" width="8" height="14" rx="4" fill="#dfd6f2"/>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Grille-pain">
+  <path d="M66 46h22v40H66zM112 46h22v40h-22z" fill="#e0a33c"/>
+  <path d="M66 46a11 11 0 0 1 22 0zM112 46a11 11 0 0 1 22 0z" fill="#f0bd63"/>
+  <rect x="24" y="74" width="152" height="88" rx="18" fill="#cdd6e8"/>
+  <rect x="24" y="74" width="152" height="26" rx="14" fill="#e6ecf7"/>
+  <rect x="52" y="84" width="40" height="10" rx="5" fill="#2a2636"/>
+  <rect x="108" y="84" width="40" height="10" rx="5" fill="#2a2636"/>
+  <rect x="44" y="118" width="76" height="12" rx="6" fill="#9aa6bd"/>
+  <circle cx="150" cy="136" r="14" fill="#ff8a1f"/>
+  <rect x="176" y="96" width="12" height="34" rx="6" fill="#9aa6bd"/>
+</svg>
