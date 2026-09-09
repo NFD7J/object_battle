@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { HeroStats, TopPlayersPanel } from "@/components/game-live";
+import { getAllObjects } from "@/lib/queries";
 import { HistoryList } from "@/components/history-list";
 import { Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
 
@@ -25,7 +26,9 @@ const ETAPES = [
   },
 ];
 
-export default function AccueilPage() {
+export default async function AccueilPage() {
+  const objets = await getAllObjects();
+
   return (
     <>
       {/* ------------------------------------------------------------------ */}
@@ -67,7 +70,7 @@ export default function AccueilPage() {
               </Link>
             </div>
 
-            <HeroStats />
+            <HeroStats nbObjets={objets.length} />
           </div>
 
           {/* Aperçu du classement */}

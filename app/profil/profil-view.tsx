@@ -7,11 +7,15 @@ import { HistoryList } from "@/components/history-list";
 import { PlayerAvatar } from "@/components/ranking-table";
 import { Panel, PageHeader, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
 import { useJoueur, useJoueurs } from "@/lib/game-store";
-import { combatants } from "@/lib/mock-data";
+import type { Combatant } from "@/lib/types";
 
-export function ProfilView() {
+export function ProfilView({ objets }: { objets: Combatant[] }) {
   const joueur = useJoueur();
   const joueurs = useJoueurs();
+
+  // La page serveur redirige déjà les visiteurs non connectés ; ce garde-fou
+  // couvre le court instant avant que le store ait reçu le joueur.
+  if (!joueur) return null;
 
   const rang =
     [...joueurs].sort((a, b) => b.points - a.points).findIndex(
@@ -23,7 +27,7 @@ export function ProfilView() {
       ? 0
       : Math.round((joueur.nbVictoires / joueur.nbCombats) * 100);
 
-  const objetsFavoris = combatants.slice(0, 3);
+  const objetsFavoris = objets.slice(0, 3);
 
   const chiffres = [
     { label: "Points", valeur: joueur.points.toLocaleString("fr-FR"), couleur: "text-arcade-gold" },

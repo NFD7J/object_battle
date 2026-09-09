@@ -6,19 +6,20 @@ import { CombatantPortrait, OverallBadge } from "@/components/combatant-card";
 import { HistoryList } from "@/components/history-list";
 import { StatList } from "@/components/stat-bar";
 import { Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
-import { combatants, getCombatantBySlug } from "@/lib/mock-data";
+import { getObjectBySlug, getObjectSlugs } from "@/lib/queries";
 import { STAT_HINTS, STAT_KEYS, STAT_LABELS } from "@/lib/types";
 
 /** Une page statique par objet : URL propre du type /objets/marteau (§15). */
-export function generateStaticParams() {
-  return combatants.map((combatant) => ({ slug: combatant.slug }));
+export async function generateStaticParams() {
+  const slugs = await getObjectSlugs();
+  return slugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata(
   props: PageProps<"/objets/[slug]">,
 ): Promise<Metadata> {
   const { slug } = await props.params;
-  const combatant = getCombatantBySlug(slug);
+  const combatant = await getObjectBySlug(slug);
 
   if (!combatant) {
     return { title: "Objet introuvable" };
@@ -32,15 +33,11 @@ export async function generateMetadata(
 
 export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">) {
   const { slug } = await props.params;
-  const combatant = getCombatantBySlug(slug);
+  const combatant = await getObjectBySlug(slug);
 
   if (!combatant) {
     notFound();
   }
-
-  const autresObjets = combatants
-    .filter((autre) => autre.id !== combatant.id)
-    .slice(0, 3);
 
   return (
     <>

@@ -4,7 +4,6 @@ import { useState } from "react";
 
 import { FightRow } from "@/components/fight-row";
 import { Panel } from "@/components/ui";
-import type { Fight } from "@/lib/types";
 import { useGame } from "@/lib/game-store";
 
 type Filtre = "tous" | "gain" | "perte";

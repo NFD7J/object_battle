@@ -19,7 +19,7 @@ const STATS_PAR_DEFAUT: Stats = {
    Formulaire de création d'objet (§4.3).
 
    L'envoi se fait en deux temps :
-     1. l'image part sur le CDN Vercel Blob via POST /api/upload, qui renvoie
+     1. l'image part sur Cloudinary via POST /api/upload, qui renvoie
         son URL publique ;
      2. cette URL accompagne le reste du formulaire vers POST /api/objets.
 
