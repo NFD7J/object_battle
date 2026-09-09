@@ -46,26 +46,6 @@ VALUES
    'Attaque à distance avec projectiles brûlants. Imprévisible, comme sa minuterie.',
    '/objets/grille-pain.svg', 58, 52, 76, 33, 9, 18)
 ON CONFLICT (slug) DO NOTHING;
-
--- ---------------------------------------------------------------------------
--- Joueurs
---
--- ATTENTION : le password_hash ci-dessous est un marqueur, pas un hash valide.
--- Les vrais comptes doivent être créés via createPlayer(), avec un hash bcrypt
--- ou argon2 calculé par l'application. Aucun mot de passe en clair en base.
--- ---------------------------------------------------------------------------
-INSERT INTO users (username, password_hash, avatar_color, points, max_points, nb_victoires, nb_combats)
-VALUES
-  ('Noe',      'A_REMPLACER_PAR_UN_HASH', '#a855f7', 1870, 2140, 87, 121),
-  ('Mathias',  'A_REMPLACER_PAR_UN_HASH', '#5b83ff', 1642, 1980, 82, 130),
-  ('David',    'A_REMPLACER_PAR_UN_HASH', '#ff8a1f', 1408, 1512, 76, 140),
-  ('Beatrice', 'A_REMPLACER_PAR_UN_HASH', '#22d3ee', 1195, 1310, 64,  99),
-  ('Yanis',    'A_REMPLACER_PAR_UN_HASH', '#34d399', 1042, 1180, 58, 112),
-  ('Lina',     'A_REMPLACER_PAR_UN_HASH', '#ffc53d',  930, 1024, 51,  88),
-  ('Karim',    'A_REMPLACER_PAR_UN_HASH', '#ff5069',  814,  902, 47, 105),
-  ('Sofia',    'A_REMPLACER_PAR_UN_HASH', '#c084fc',  702,  860, 39,  94)
-ON CONFLICT (username) DO NOTHING;
-
 -- ---------------------------------------------------------------------------
 -- Combats
 --

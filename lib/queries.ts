@@ -288,12 +288,8 @@ export type NewObjectInput = {
   name: unknown;
   description?: unknown;
   image: unknown;
-  stats: {
-    puissance: unknown;
-    resistance: unknown;
-    rapidite: unknown;
-    intelligence: unknown;
-  };
+  /** Objet contenant puissance, resistance, rapidite et intelligence. */
+  stats: unknown;
 };
 
 /**
@@ -317,10 +313,15 @@ export async function createObject(input: NewObjectInput): Promise<Combatant> {
     throw new ValidationError("Le nom doit contenir au moins une lettre ou un chiffre.");
   }
 
-  const power = statValide(input.stats?.puissance, "puissance");
-  const resistance = statValide(input.stats?.resistance, "résistance");
-  const speed = statValide(input.stats?.rapidite, "rapidité");
-  const intelligence = statValide(input.stats?.intelligence, "intelligence");
+  const stats =
+    typeof input.stats === "object" && input.stats !== null
+      ? (input.stats as Record<string, unknown>)
+      : {};
+
+  const power = statValide(stats.puissance, "puissance");
+  const resistance = statValide(stats.resistance, "résistance");
+  const speed = statValide(stats.rapidite, "rapidité");
+  const intelligence = statValide(stats.intelligence, "intelligence");
 
   const rows = (await sql`
     INSERT INTO objects (slug, name, description, image, power, resistance, speed, intelligence)
@@ -548,8 +549,7 @@ export const getRanking = cache(
   },
 );
 
-/** Un joueur par son identifiant. */
-export const getPlayerById = cache(async (id: number): Promise<Player | null> => {
+async function lirePlayerById(id: number): Promise<Player | null> {
   const sql = getSql();
 
   const rows = (await sql`
@@ -560,7 +560,18 @@ export const getPlayerById = cache(async (id: number): Promise<Player | null> =>
   `) as UserRow[];
 
   return rows[0] ? toPlayer(rows[0]) : null;
-});
+}
+
+/** Un joueur par son identifiant. */
+export const getPlayerById = cache(lirePlayerById);
+
+/**
+ * Même lecture, sans mémoïsation.
+ *
+ * À utiliser après une écriture dans la même requête : getPlayerById() renvoie
+ * la valeur mise en cache au premier appel, donc les points d'avant le combat.
+ */
+export const getPlayerByIdFresh = lirePlayerById;
 
 /** La place d'un joueur au classement par points, 1 étant le premier. */
 export const getPlayerRank = cache(async (id: number): Promise<number | null> => {

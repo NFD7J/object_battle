@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
 
 import { Panel, Tag, btn, btnLabel } from "@/components/ui";
 import { StatList } from "@/components/stat-bar";
@@ -17,20 +18,89 @@ const STATS_PAR_DEFAUT: Stats = {
 /* ==========================================================================
    Formulaire de création d'objet (§4.3).
 
-   ⚠️ Rien n'est envoyé ni enregistré pour l'instant : l'upload vers Vercel
-   Blob (§7), la validation serveur (§16) et l'insertion en base (§10) seront
-   ajoutés ensuite. Le formulaire ne gère ici que l'aperçu à l'écran.
+   L'envoi se fait en deux temps :
+     1. l'image part sur le CDN Vercel Blob via POST /api/upload, qui renvoie
+        son URL publique ;
+     2. cette URL accompagne le reste du formulaire vers POST /api/objets.
+
+   Les contrôles faits ici (champ obligatoire, image choisie) ne sont qu'un
+   confort d'affichage : la validation qui fait foi est celle du serveur, seule
+   à ne pas pouvoir être contournée (§16).
    ========================================================================== */
 
+type ReponseUpload = { url?: string; error?: { message?: string } };
+type ReponseObjet = { objet?: { slug: string }; error?: { message?: string } };
+
 export function ObjectForm() {
+  const router = useRouter();
+  const champFichier = useRef<HTMLInputElement>(null);
+
   const [nom, setNom] = useState("");
   const [description, setDescription] = useState("");
   const [stats, setStats] = useState<Stats>(STATS_PAR_DEFAUT);
   const [apercuImage, setApercuImage] = useState<string | null>(null);
   const [nomFichier, setNomFichier] = useState<string | null>(null);
+  const [envoiEnCours, setEnvoiEnCours] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
 
   function changerStat(cle: keyof Stats, valeur: number) {
     setStats((precedent) => ({ ...precedent, [cle]: valeur }));
+  }
+
+  async function envoyer(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErreur(null);
+
+    const fichier = champFichier.current?.files?.[0];
+
+    if (!fichier) {
+      setErreur("Choisissez une image pour votre objet.");
+      return;
+    }
+
+    setEnvoiEnCours(true);
+
+    try {
+      // 1. L'image part sur le CDN. Le fichier est streamé tel quel dans le
+      //    corps de la requête, son nom passe en paramètre d'URL.
+      const reponseUpload = await fetch(
+        `/api/upload?filename=${encodeURIComponent(fichier.name)}`,
+        {
+          method: "POST",
+          headers: { "content-type": fichier.type },
+          body: fichier,
+        },
+      );
+
+      const blob: ReponseUpload = await reponseUpload.json();
+
+      if (!reponseUpload.ok || !blob.url) {
+        throw new Error(blob.error?.message ?? "L'envoi de l'image a échoué.");
+      }
+
+      // 2. L'objet est créé avec l'URL renvoyée par le CDN.
+      const reponseObjet = await fetch("/api/objets", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: nom, description, image: blob.url, stats }),
+      });
+
+      const donnees: ReponseObjet = await reponseObjet.json();
+
+      if (!reponseObjet.ok || !donnees.objet) {
+        throw new Error(donnees.error?.message ?? "La création de l'objet a échoué.");
+      }
+
+      // Succès : on file sur la fiche du nouveau combattant.
+      router.push(`/objets/${donnees.objet.slug}`);
+    } catch (probleme) {
+      setErreur(
+        probleme instanceof Error
+          ? probleme.message
+          : "Une erreur est survenue, réessayez.",
+      );
+      setEnvoiEnCours(false);
+    }
   }
 
   function changerImage(fichier: File | undefined) {
@@ -51,11 +121,7 @@ export function ObjectForm() {
       {/* ------------------------------------------------------------------ */}
       {/* Formulaire                                                          */}
       {/* ------------------------------------------------------------------ */}
-      <form
-        // TODO : brancher sur POST /api/objets une fois l'API REST en place.
-        onSubmit={(event) => event.preventDefault()}
-        className="grid gap-6"
-      >
+      <form onSubmit={envoyer} aria-busy={envoiEnCours} className="grid gap-6">
         <Panel innerClassName="grid gap-5 p-6">
           <h2 className="text-2xl text-white">Identité</h2>
 
@@ -122,6 +188,8 @@ export function ObjectForm() {
               id="image"
               name="image"
               type="file"
+              required
+              ref={champFichier}
               accept="image/png,image/jpeg,image/webp"
               onChange={(event) => changerImage(event.target.files?.[0])}
               className="w-full border border-dashed border-edge bg-panel-soft px-4 py-6 text-sm text-white/70 file:mr-4 file:-skew-x-6 file:border-0 file:bg-arcade-violet file:px-4 file:py-2 file:font-mono file:text-xs file:tracking-widest file:text-white file:uppercase hover:border-arcade-violet"
@@ -177,12 +245,29 @@ export function ObjectForm() {
         </Panel>
 
         <div>
-          <button type="submit" className={`${btn.base} ${btn.primary} w-full sm:w-auto`}>
-            <span className={btnLabel}>Créer l&apos;objet</span>
+          {erreur ? (
+            <p
+              role="alert"
+              className="cut-corner-sm mb-4 border-2 border-defeat bg-defeat/10 px-4 py-3 text-sm text-defeat"
+            >
+              <span aria-hidden="true">✕</span> {erreur}
+            </p>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={envoiEnCours}
+            className={`${btn.base} ${btn.primary} w-full disabled:cursor-not-allowed disabled:from-edge disabled:to-edge disabled:text-white/40 disabled:shadow-none sm:w-auto`}
+          >
+            <span className={btnLabel}>
+              {envoiEnCours ? "Envoi en cours…" : "Créer l'objet"}
+            </span>
           </button>
-          <p className="mt-3 font-mono text-xs text-white/45">
-            L&apos;envoi du formulaire, l&apos;upload de l&apos;image et
-            l&apos;enregistrement en base seront branchés à l&apos;étape suivante.
+
+          <p className="mt-3 font-mono text-xs text-white/45" aria-live="polite">
+            {envoiEnCours
+              ? "L'image part sur le CDN, puis l'objet rejoint le roster."
+              : "L'image est envoyée sur le CDN, puis l'objet est enregistré en base."}
           </p>
         </div>
       </form>
