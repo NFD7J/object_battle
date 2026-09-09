@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { CombatantPortrait } from "@/components/combatant-card";
 import { FightRow } from "@/components/fight-row";
 import { PlayerAvatar } from "@/components/ranking-table";
 import { Panel, PageHeader, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
-import { combatants, currentPlayer, fights, players } from "@/lib/mock-data";
+import { getCurrentPlayer } from "@/lib/auth";
+import { getAllObjects, getFightsByPlayer, getPlayerRank } from "@/lib/queries";
 
 import { ProfilView } from "@/app/profil/profil-view";
 
@@ -15,18 +17,26 @@ export const metadata: Metadata = {
     "Votre profil Object Battle : points, victoires, taux de réussite, position au classement et derniers combats.",
 };
 
-export default function ProfilPage() {
-  const rang =
-    [...players].sort((a, b) => b.points - a.points).findIndex(
-      (player) => player.id === currentPlayer.id,
-    ) + 1;
+export default async function ProfilPage() {
+  const currentPlayer = await getCurrentPlayer();
 
-  const tauxVictoire = Math.round(
-    (currentPlayer.nbVictoires / currentPlayer.nbCombats) * 100,
-  );
+  // Page réservée aux joueurs connectés.
+  if (!currentPlayer) {
+    redirect("/connexion");
+  }
 
-  const derniersCombats = fights.slice(0, 3);
-  const objetsFavoris = combatants.slice(0, 3);
+  const [rang, derniersCombats, objets] = await Promise.all([
+    getPlayerRank(currentPlayer.id),
+    getFightsByPlayer(currentPlayer.id, 3),
+    getAllObjects(),
+  ]);
+
+  const tauxVictoire =
+    currentPlayer.nbCombats === 0
+      ? 0
+      : Math.round((currentPlayer.nbVictoires / currentPlayer.nbCombats) * 100);
+
+  const objetsFavoris = objets.slice(0, 3);
 
   const chiffres = [
     { label: "Points", valeur: currentPlayer.points.toLocaleString("fr-FR"), couleur: "text-arcade-gold" },
@@ -62,7 +72,7 @@ export default function ProfilPage() {
               </h2>
               <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/70">
                 <span>
-                  <span aria-hidden="true">🏆</span> {rang}
+                  <span aria-hidden="true">🏆</span> {rang ?? "—"}
                   <sup>e</sup> au classement
                 </span>
                 <span>
@@ -119,7 +129,11 @@ export default function ProfilPage() {
               <div
                 className="h-full bg-linear-to-r from-arcade-violet to-arcade-cyan"
                 style={{
-                  width: `${Math.round((currentPlayer.points / currentPlayer.maxPoints) * 100)}%`,
+                  width: `${
+                    currentPlayer.maxPoints > 0
+                      ? Math.round((currentPlayer.points / currentPlayer.maxPoints) * 100)
+                      : 0
+                  }%`,
                 }}
               />
               <div
@@ -169,13 +183,27 @@ export default function ProfilPage() {
           <SectionTitle href="/historique" linkLabel="Tout l'historique">
             Mes derniers combats
           </SectionTitle>
-          <ul className="grid gap-3">
-            {derniersCombats.map((fight) => (
-              <li key={fight.id}>
-                <FightRow fight={fight} compact />
-              </li>
-            ))}
-          </ul>
+          {derniersCombats.length > 0 ? (
+            <ul className="grid gap-3">
+              {derniersCombats.map((fight) => (
+                <li key={fight.id}>
+                  <FightRow fight={fight} compact />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Panel innerClassName="p-8 text-center">
+              <p className="font-display text-2xl text-white/60">
+                Aucun combat pour le moment
+              </p>
+              <p className="mt-2 text-sm text-white/50">
+                Choisissez deux objets et lancez votre premier round.
+              </p>
+              <Link href="/combattre" className={`${btn.base} ${btn.primary} mt-6`}>
+                <span className={btnLabel}>Combattre</span>
+              </Link>
+            </Panel>
+          )}
         </section>
       </div>
     </>

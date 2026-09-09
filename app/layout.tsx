@@ -3,6 +3,7 @@ import { Anton, Geist, Geist_Mono } from "next/font/google";
 
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { getCurrentPlayer } from "@/lib/auth";
 import { GameProvider } from "@/lib/game-store";
 
 import "./globals.css";
@@ -49,7 +50,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Lire la session ici rend toutes les pages dynamiques : c'est le prix à
+  // payer pour que l'en-tête affiche le bon joueur dès le premier rendu.
+  const joueur = await getCurrentPlayer();
+
   return (
     <html
       lang="fr"
@@ -63,7 +68,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           >
             Aller au contenu principal
           </a>
-          <SiteHeader />
+          <SiteHeader player={joueur}/>
           <main id="contenu" className="flex-1">
             {children}
           </main>

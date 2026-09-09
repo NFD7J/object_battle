@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
+import type { Player } from "@/lib/types";
 import { currentPlayer } from "@/lib/mock-data";
 import { useGame } from "@/lib/game-store";
 
@@ -16,18 +17,35 @@ const NAV_LINKS = [
   { href: "/profil", label: "Profil" },
 ] as const;
 
-export function SiteHeader() {
+export function SiteHeader({ player }: { player: Player | null }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [deconnexionEnCours, setDeconnexionEnCours] = useState(false);
   const { points } = useGame();
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
 
+  async function seDeconnecter() {
+    setDeconnexionEnCours(true);
+    await fetch("/api/auth/deconnexion", { method: "POST" });
+    setMenuOpen(false);
+    // refresh() reconstruit les composants serveur : l'en-tête et le profil
+    // cessent de voir une session.
+    router.push("/");
+    router.refresh();
+    setDeconnexionEnCours(false);
+  }
+
   return (
     <header className="sticky top-0 z-50 border-b border-edge/80 bg-abyss/95 backdrop-blur-sm">
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3 sm:px-6">
-        <Link href="/" className="flex items-center gap-2.5" aria-label="Object Battle — retour à l'accueil">
+        <Link
+          href="/"
+          className="flex items-center gap-2.5"
+          aria-label="Object Battle — retour à l'accueil"
+        >
           <span
             aria-hidden="true"
             className="grid h-9 w-9 -skew-x-6 place-items-center bg-linear-to-br from-arcade-violet to-arcade-blue font-display text-xl text-white"
@@ -66,22 +84,50 @@ export function SiteHeader() {
           </ul>
         </nav>
 
-        {/* Compteur de points du joueur, façon jetons d'arcade */}
-        <p
-          className="ml-auto hidden items-center gap-2 border border-edge bg-panel px-3 py-1.5 sm:flex lg:ml-4"
-          aria-live="polite"
-        >
-          <span aria-hidden="true" className="text-arcade-gold">
-            &#9670;
-          </span>
-          <span className="font-mono text-sm font-bold text-arcade-gold" suppressHydrationWarning>
-            {points.toLocaleString("fr-FR")}
-          </span>
-          <span className="sr-only">points disponibles</span>
-          <span aria-hidden="true" className="font-mono text-[10px] tracking-widest text-white/50">
-            PTS
-          </span>
-        </p>
+        {/* Joueur connecté : compteur de points et déconnexion.
+            Sinon : invitation à se connecter. */}
+        {player ? (
+          <div className="ml-auto hidden items-center gap-2 sm:flex lg:ml-4">
+            <p className="flex items-center gap-2 border border-edge bg-panel px-3 py-1.5">
+              <span aria-hidden="true" className="text-arcade-gold">
+                &#9670;
+              </span>
+              <span className="font-mono text-sm font-bold text-arcade-gold">
+                {player.points.toLocaleString("fr-FR")}
+              </span>
+              <span className="sr-only">points disponibles</span>
+              <span
+                aria-hidden="true"
+                className="font-mono text-[10px] tracking-widest text-white/50"
+              >
+                PTS
+              </span>
+            </p>
+            <button
+              type="button"
+              onClick={seDeconnecter}
+              disabled={deconnexionEnCours}
+              className="tag-slant bg-panel px-3 py-2 font-mono text-[10px] tracking-[0.14em] text-white/60 uppercase transition-colors hover:bg-panel-soft hover:text-defeat disabled:opacity-50"
+            >
+              Quitter
+            </button>
+          </div>
+        ) : (
+          <div className="ml-auto hidden items-center gap-2 sm:flex lg:ml-4">
+            <Link
+              href="/connexion"
+              className="tag-slant bg-panel px-4 py-2 font-mono text-[11px] tracking-[0.14em] text-white/70 uppercase hover:bg-panel-soft hover:text-white"
+            >
+              Connexion
+            </Link>
+            <Link
+              href="/inscription"
+              className="tag-slant bg-linear-to-r from-arcade-orange to-arcade-gold px-4 py-2 font-mono text-[11px] font-bold tracking-[0.14em] text-void uppercase hover:brightness-110"
+            >
+              S&apos;inscrire
+            </Link>
+          </div>
+        )}
 
         {/* Bouton burger mobile */}
         <button
@@ -137,13 +183,41 @@ export function SiteHeader() {
             );
           })}
         </ul>
-        <p
-          className="mx-auto flex max-w-6xl items-center gap-2 px-6 pb-4 font-mono text-sm text-arcade-gold"
-          aria-live="polite"
-        >
-          &#9670;{" "}
-          <span suppressHydrationWarning>{points.toLocaleString("fr-FR")}</span> points
-        </p>
+
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-6 pb-4">
+          {player ? (
+            <>
+              <p className="font-mono text-sm text-arcade-gold">
+                &#9670; {player.points.toLocaleString("fr-FR")} points
+              </p>
+              <button
+                type="button"
+                onClick={seDeconnecter}
+                disabled={deconnexionEnCours}
+                className="tag-slant ml-auto bg-panel-soft px-4 py-2 font-mono text-[11px] tracking-[0.14em] text-white/70 uppercase hover:text-defeat disabled:opacity-50"
+              >
+                Se déconnecter
+              </button>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/connexion"
+                onClick={() => setMenuOpen(false)}
+                className="tag-slant bg-panel-soft px-4 py-2 font-mono text-[11px] tracking-[0.14em] text-white/70 uppercase"
+              >
+                Connexion
+              </Link>
+              <Link
+                href="/inscription"
+                onClick={() => setMenuOpen(false)}
+                className="tag-slant bg-linear-to-r from-arcade-orange to-arcade-gold px-4 py-2 font-mono text-[11px] font-bold tracking-[0.14em] text-void uppercase"
+              >
+                S&apos;inscrire
+              </Link>
+            </>
+          )}
+        </div>
       </nav>
 
       {/* Liseré lumineux sous la barre */}
