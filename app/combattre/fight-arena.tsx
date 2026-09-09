@@ -1,16 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { CombatantPortrait, OverallBadge } from "@/components/combatant-card";
+import { HealthBar } from "@/components/health-bar";
 import { StatList } from "@/components/stat-bar";
 import { Panel, Tag, btn, btnLabel } from "@/components/ui";
-import { combatants, currentPlayer } from "@/lib/mock-data";
+import {
+  PV_MAX,
+  calculerCotes,
+  deltaParis,
+  formatCote,
+  gainPotentiel,
+  resoudreCombat,
+} from "@/lib/fight-engine";
+import type { Cotes, Issue, ResultatCombat } from "@/lib/fight-engine";
+import { useGame } from "@/lib/game-store";
+import { combatants } from "@/lib/mock-data";
 import type { Combatant } from "@/lib/types";
 
 type Slot = "A" | "B";
-type BetChoice = Slot | "nul";
+type BetChoice = Issue;
 type Phase = "selection" | "resultat";
 
 const MISES = [10, 25, 50, 100];
@@ -25,9 +36,9 @@ const ETAPES = [
 /* ==========================================================================
    Écran « Combattre » — sélection, pari, résultat.
 
-   ⚠️ Aucune règle de jeu n'est implémentée ici : le score, le vainqueur et le
-   gain affichés dans la phase « résultat » sont des valeurs de démonstration.
-   Le moteur de combat (§9) et l'enregistrement en base (§10) les remplaceront.
+   L'issue du combat est tirée au sort par `resoudreCombat()` : les stats ne
+   décident de rien. Elles servent uniquement à établir les cotes du pari.
+   L'enregistrement en base (§10) viendra plus tard.
    ========================================================================== */
 
 export function FightArena() {
@@ -38,10 +49,35 @@ export function FightArena() {
   const [mise, setMise] = useState<number>(25);
   const [recherche, setRecherche] = useState("");
   const [phase, setPhase] = useState<Phase>("selection");
+  const [resultat, setResultat] = useState<ResultatCombat | null>(null);
+  const [soldeAvant, setSoldeAvant] = useState<number | null>(null);
+  const { points, enregistrerCombat } = useGame();
 
-  const pretAuCombat = fighterA !== null && fighterB !== null && bet !== null;
+  const cotes = useMemo(() => calculerCotes(fighterA, fighterB), [fighterA, fighterB]);
+
+  const miseAbordable =
+    mise <= points ? mise : ([...MISES].reverse().find((montant) => montant <= points) ?? mise);
+
+  const pretAuCombat =
+    fighterA !== null && fighterB !== null && bet !== null && miseAbordable <= points;
 
   const etapeCourante = !fighterA ? 0 : !fighterB ? 1 : !bet ? 2 : 3;
+
+  function lancerLeCombat() {
+    if (!fighterA || !fighterB || !bet || !cotes || miseAbordable > points) return;
+    const tirage = resoudreCombat();
+    setSoldeAvant(points);
+    enregistrerCombat({
+      fighterA,
+      fighterB,
+      resultat: tirage,
+      bet,
+      mise: miseAbordable,
+      cote: cotes[bet],
+    });
+    setResultat(tirage);
+    setPhase("resultat");
+  }
 
   function choisir(combatant: Combatant) {
     if (activeSlot === "A") {
@@ -63,6 +99,8 @@ export function FightArena() {
 
   function reinitialiser() {
     setPhase("selection");
+    setResultat(null);
+    setSoldeAvant(null);
     setBet(null);
     setFighterB(null);
     setActiveSlot("B");
@@ -116,6 +154,8 @@ export function FightArena() {
             combatant={fighterA}
             active={activeSlot === "A" && phase === "selection"}
             attacking={phase === "resultat"}
+            pv={resultat ? resultat.pvA : PV_MAX}
+            pvAnimes={phase === "resultat"}
             onSelect={() => setActiveSlot("A")}
             onClear={() => setFighterA(null)}
             disabled={phase === "resultat"}
@@ -137,6 +177,8 @@ export function FightArena() {
             combatant={fighterB}
             active={activeSlot === "B" && phase === "selection"}
             attacking={phase === "resultat"}
+            pv={resultat ? resultat.pvB : PV_MAX}
+            pvAnimes={phase === "resultat"}
             onSelect={() => setActiveSlot("B")}
             onClear={() => setFighterB(null)}
             disabled={phase === "resultat"}
@@ -266,8 +308,8 @@ export function FightArena() {
             </h2>
             <p className="mt-1 text-sm text-white/60">
               Vous disposez de{" "}
-              <strong className="font-mono text-arcade-gold">
-                {currentPlayer.points.toLocaleString("fr-FR")}
+              <strong className="font-mono text-arcade-gold" suppressHydrationWarning>
+                {points.toLocaleString("fr-FR")}
               </strong>{" "}
               points.
             </p>
@@ -277,16 +319,19 @@ export function FightArena() {
                 <legend className="font-mono text-xs tracking-[0.16em] text-arcade-cyan uppercase">
                   Sur qui misez-vous ?
                 </legend>
+                <p className="mt-1 text-sm text-white/60">
+                  La cote dépend du niveau des deux objets : miser sur
+                  l&apos;outsider rapporte plus gros.
+                </p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-3">
                   {([
                     { choix: "A" as BetChoice, label: fighterA?.name ?? "Combattant A", couleur: "border-arcade-violet" },
                     { choix: "nul" as BetChoice, label: "Match nul", couleur: "border-draw" },
                     { choix: "B" as BetChoice, label: fighterB?.name ?? "Combattant B", couleur: "border-arcade-blue" },
                   ]).map((option) => {
-                    const indisponible =
-                      (option.choix === "A" && !fighterA) ||
-                      (option.choix === "B" && !fighterB);
+                    const indisponible = !cotes;
                     const choisi = bet === option.choix;
+                    const cote = cotes?.[option.choix];
                     return (
                       <button
                         key={option.choix}
@@ -303,7 +348,11 @@ export function FightArena() {
                         <span className="block font-display text-xl text-white">
                           {option.label}
                         </span>
-                        <span className="mt-1 block font-mono text-[10px] tracking-widest uppercase">
+                        <span className="mt-2 block font-mono text-2xl leading-none font-bold text-arcade-gold tabular-nums">
+                          {cote ? formatCote(cote) : "—"}
+                          <span className="sr-only"> de cote</span>
+                        </span>
+                        <span className="mt-2 block font-mono text-[10px] tracking-widest uppercase">
                           {choisi ? (
                             <span className="text-arcade-cyan">✓ Pari retenu</span>
                           ) : (
@@ -321,22 +370,46 @@ export function FightArena() {
                   Montant de la mise
                 </legend>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {MISES.map((montant) => (
-                    <button
-                      key={montant}
-                      type="button"
-                      onClick={() => setMise(montant)}
-                      aria-pressed={mise === montant}
-                      className={`tag-slant px-5 py-2.5 font-mono text-sm font-bold tabular-nums ${
-                        mise === montant
-                          ? "bg-arcade-gold text-void"
-                          : "bg-panel-soft text-white/70 hover:text-white"
-                      }`}
-                    >
-                      {montant} pts
-                    </button>
-                  ))}
+                  {MISES.map((montant) => {
+                    const tropCher = montant > points;
+                    return (
+                      <button
+                        key={montant}
+                        type="button"
+                        disabled={tropCher}
+                        onClick={() => setMise(montant)}
+                        aria-pressed={miseAbordable === montant}
+                        className={`tag-slant px-5 py-2.5 font-mono text-sm font-bold tabular-nums disabled:cursor-not-allowed disabled:opacity-35 ${
+                          miseAbordable === montant && !tropCher
+                            ? "bg-arcade-gold text-void"
+                            : "bg-panel-soft text-white/70 hover:text-white"
+                        }`}
+                      >
+                        {montant} pts
+                      </button>
+                    );
+                  })}
                 </div>
+
+                {/* Récapitulatif mise × cote, mis à jour à chaque changement */}
+                <p
+                  aria-live="polite"
+                  className="mt-5 flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-xs text-white/50"
+                >
+                  {bet && cotes ? (
+                    <>
+                      <span>
+                        {miseAbordable} pts × {formatCote(cotes[bet])} =
+                      </span>
+                      <strong className="font-display text-2xl leading-none text-victory tabular-nums">
+                        +{gainPotentiel(miseAbordable, cotes[bet])} pts
+                      </strong>
+                      <span>en cas de bon pronostic.</span>
+                    </>
+                  ) : (
+                    <span>Choisissez une issue pour voir le gain potentiel.</span>
+                  )}
+                </p>
               </fieldset>
             </Panel>
           </section>
@@ -348,15 +421,19 @@ export function FightArena() {
             <button
               type="button"
               disabled={!pretAuCombat}
-              onClick={() => setPhase("resultat")}
+              onClick={lancerLeCombat}
               className={`${btn.base} ${btn.primary} !px-12 !py-5 text-2xl disabled:cursor-not-allowed disabled:from-edge disabled:to-edge disabled:text-white/40 disabled:shadow-none`}
             >
               <span className={btnLabel}>Lancer le combat</span>
             </button>
             <p className="mt-3 font-mono text-xs text-white/45" aria-live="polite">
-              {pretAuCombat
-                ? `Mise de ${mise} points engagée.`
-                : "Sélectionnez deux objets et placez votre pari pour lancer le combat."}
+              {points < Math.min(...MISES)
+                ? "Plus assez de points pour miser. Les prochains paris devront attendre."
+                : miseAbordable > points
+                  ? `Mise trop élevée : il vous reste ${points.toLocaleString("fr-FR")} points.`
+                  : pretAuCombat && cotes
+                    ? `Mise de ${miseAbordable} points engagée à la cote ${formatCote(cotes[bet!])}. L'issue est tirée au sort.`
+                    : "Sélectionnez deux objets et placez votre pari pour lancer le combat."}
             </p>
           </div>
         </>
@@ -365,7 +442,10 @@ export function FightArena() {
           fighterA={fighterA!}
           fighterB={fighterB!}
           bet={bet!}
-          mise={mise}
+          mise={miseAbordable}
+          cotes={cotes!}
+          resultat={resultat!}
+          soldeAvant={soldeAvant ?? points}
           onRejouer={reinitialiser}
         />
       )}
@@ -382,6 +462,8 @@ function FighterSlot({
   combatant,
   active,
   attacking,
+  pv,
+  pvAnimes,
   mirrored = false,
   disabled = false,
   onSelect,
@@ -391,6 +473,8 @@ function FighterSlot({
   combatant: Combatant | null;
   active: boolean;
   attacking: boolean;
+  pv: number;
+  pvAnimes: boolean;
   mirrored?: boolean;
   disabled?: boolean;
   onSelect: () => void;
@@ -449,7 +533,11 @@ function FighterSlot({
         {combatant.name}
       </h3>
 
-      <div className="mt-5">
+      <div className="mt-4">
+        <HealthBar pv={pv} mirrored={mirrored} anime={pvAnimes} />
+      </div>
+
+      <div className="mt-5 border-t border-edge pt-5">
         <StatList
           stats={combatant.stats}
           tone={slot === "A" ? "violet" : "cyan"}
@@ -491,22 +579,27 @@ function FightResult({
   fighterB,
   bet,
   mise,
+  cotes,
+  resultat,
+  soldeAvant,
   onRejouer,
 }: {
   fighterA: Combatant;
   fighterB: Combatant;
   bet: BetChoice;
   mise: number;
+  cotes: Cotes;
+  resultat: ResultatCombat;
+  soldeAvant: number;
   onRejouer: () => void;
 }) {
-  // PLACEHOLDER — remplacer par le moteur de combat (§9).
-  // On se contente de comparer les scores globaux stockés pour pouvoir
-  // afficher la mise en page du résultat ; il n'y a ici ni formule ni aléatoire.
-  const scoreA = fighterA.overall;
-  const scoreB = fighterB.overall;
-  const vainqueur: BetChoice = scoreA === scoreB ? "nul" : scoreA > scoreB ? "A" : "B";
+  // Le vainqueur a été tiré au sort au lancement du combat ; les PV restants
+  // sont affichés par les barres de vie de l'arène, juste au-dessus.
+  const { vainqueur } = resultat;
+  const cote = cotes[bet];
   const pariGagnant = bet === vainqueur;
-  const delta = pariGagnant ? mise * 2 : -mise;
+  const delta = deltaParis(mise, cote, pariGagnant);
+  const soldeApres = Math.max(0, soldeAvant + delta);
 
   const nomVainqueur =
     vainqueur === "nul" ? null : vainqueur === "A" ? fighterA.name : fighterB.name;
@@ -522,7 +615,7 @@ function FightResult({
         <div aria-hidden="true" className="arena-grid absolute inset-0 opacity-40" />
         <div className="relative px-6 py-8 text-center">
           <p className="font-mono text-xs tracking-[0.3em] text-white/60 uppercase">
-            {vainqueur === "nul" ? "Égalité parfaite" : "K.O."}
+            {vainqueur === "nul" ? "Double K.O." : "K.O."}
           </p>
           <p
             className={`skew-title mt-3 font-display text-4xl leading-none sm:text-6xl ${
@@ -530,29 +623,6 @@ function FightResult({
             }`}
           >
             {nomVainqueur ? `${nomVainqueur} gagne !` : "Match nul !"}
-          </p>
-
-          <p className="mt-6 flex items-center justify-center gap-4 font-display text-4xl sm:text-5xl">
-            <span
-              className={
-                vainqueur === "A" ? "text-victory" : vainqueur === "B" ? "text-defeat" : "text-draw"
-              }
-            >
-              {scoreA}
-            </span>
-            <span aria-hidden="true" className="text-2xl text-white/30">
-              —
-            </span>
-            <span
-              className={
-                vainqueur === "B" ? "text-victory" : vainqueur === "A" ? "text-defeat" : "text-draw"
-              }
-            >
-              {scoreB}
-            </span>
-          </p>
-          <p className="sr-only">
-            Score de {fighterA.name} : {scoreA}. Score de {fighterB.name} : {scoreB}.
           </p>
 
           {/* Gain ou perte : icône + mot + montant, jamais la couleur seule */}
@@ -575,6 +645,15 @@ function FightResult({
             >
               {delta > 0 ? `+${delta}` : delta} pts
             </span>
+          </p>
+          <p className="mt-3 font-mono text-xs text-white/50">
+            Mise de {mise} pts à la cote {formatCote(cote)}.
+          </p>
+          <p className="mt-2 font-mono text-sm text-white/70 tabular-nums" aria-live="polite">
+            Solde : {soldeAvant.toLocaleString("fr-FR")} →{" "}
+            <strong className={pariGagnant ? "text-victory" : "text-defeat"}>
+              {soldeApres.toLocaleString("fr-FR")} pts
+            </strong>
           </p>
         </div>
       </Panel>

@@ -3,10 +3,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { CombatantPortrait, OverallBadge } from "@/components/combatant-card";
-import { FightRow } from "@/components/fight-row";
+import { HistoryList } from "@/components/history-list";
 import { StatList } from "@/components/stat-bar";
 import { Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
-import { combatants, fights, getCombatantBySlug } from "@/lib/mock-data";
+import { combatants, getCombatantBySlug } from "@/lib/mock-data";
 import { STAT_HINTS, STAT_KEYS, STAT_LABELS } from "@/lib/types";
 
 /** Une page statique par objet : URL propre du type /objets/marteau (§15). */
@@ -37,11 +37,6 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
   if (!combatant) {
     notFound();
   }
-
-  // Combats auxquels cet objet a participé.
-  const combatsDeLObjet = fights.filter(
-    (fight) => fight.fighterA.id === combatant.id || fight.fighterB.id === combatant.id,
-  );
 
   const autresObjets = combatants
     .filter((autre) => autre.id !== combatant.id)
@@ -189,21 +184,13 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
             Derniers combats de {combatant.name}
           </SectionTitle>
 
-          {combatsDeLObjet.length > 0 ? (
-            <ul className="grid gap-3">
-              {combatsDeLObjet.map((fight) => (
-                <li key={fight.id}>
-                  <FightRow fight={fight} compact />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <Panel innerClassName="p-8 text-center">
-              <p className="text-white/60">
-                Cet objet n&apos;est encore jamais monté sur le ring.
-              </p>
-            </Panel>
-          )}
+          <HistoryList
+            compact
+            combatantId={combatant.id}
+            filtres={false}
+            emptyTitle="Aucun combat ici"
+            emptyText="Cet objet n'est encore jamais monté sur le ring."
+          />
         </div>
       </section> 
     </>

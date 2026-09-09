@@ -5,6 +5,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
 import type { Player } from "@/lib/types";
+import { currentPlayer } from "@/lib/mock-data";
+import { useGame } from "@/lib/game-store";
 
 const NAV_LINKS = [
   { href: "/", label: "Accueil" },
@@ -20,6 +22,7 @@ export function SiteHeader({ player }: { player: Player | null }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deconnexionEnCours, setDeconnexionEnCours] = useState(false);
+  const { points } = useGame();
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
