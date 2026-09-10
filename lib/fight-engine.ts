@@ -28,9 +28,6 @@ export type ResultatCombat = {
 /** Points de vie de départ, identiques pour tous les objets. */
 export const PV_MAX = 100;
 
-/** Marge de la maison : les cotes sont légèrement inférieures aux cotes pures. */
-const MARGE = 1.08;
-
 /** Plancher des cotes, pour qu'un pari sur le grand favori rapporte un minimum. */
 const COTE_MIN = 1.15;
 
@@ -53,7 +50,7 @@ const COTE_MAX = 25;
 export function enCote(probabilite: number): number {
   if (probabilite <= 0) return COTE_MAX;
 
-  const cote = 1 / probabilite / MARGE;
+  const cote = 1 / probabilite;
   return Math.min(COTE_MAX, Math.max(COTE_MIN, Math.round(cote * 100) / 100));
 }
 
