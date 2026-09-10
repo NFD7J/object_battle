@@ -2,7 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 
-import { simulerCotes } from "@/lib/combat";
+import { pvDepuisScores, simulerCotes } from "@/lib/combat";
 import { ConflictError, ValidationError, getSql } from "@/lib/db";
 import type { Cotes } from "@/lib/fight-engine";
 import type { Object, Fight, FightBet, Player, RankingSort, Stats } from "@/lib/types";
@@ -160,13 +160,17 @@ function toFight(row: FightRow): Fight {
         }
       : null;
 
+  // Les scores bruts du moteur (jusqu'à 600) ne sont pas des PV : les jauges
+  // sont déduites de l'écart entre les deux, sur une base de PV_MAX.
+  const { pvA, pvB } = pvDepuisScores(row.score_1, row.score_2, row.winner_id === null);
+
   return {
     id: row.id,
     fighterA: toObject(row.fighter_a),
     fighterB: toObject(row.fighter_b),
     winnerId: row.winner_id,
-    pvA: row.score_1,
-    pvB: row.score_2,
+    pvA,
+    pvB,
     bet,
     createdAt: toIsoDate(row.created_at),
   };

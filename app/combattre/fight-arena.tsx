@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { CombatantPortrait, OverallBadge } from "@/components/object-card";
-import { HealthBar } from "@/components/health-bar";
+import { DUREE_PV, HealthBar, mouvementReduit } from "@/components/health-bar";
 import { StatList } from "@/components/stat-bar";
 import { Panel, Tag, btn, btnLabel } from "@/components/ui";
 import { PV_MAX, deltaParis, formatCote, gainPotentiel } from "@/lib/fight-engine";
@@ -15,9 +15,32 @@ import type { Object, Fight, Player } from "@/lib/types";
 
 type Slot = "A" | "B";
 type BetChoice = Issue;
-type Phase = "selection" | "resultat";
+/**
+ * « combat » est la passe d'armes : les portraits s'entrechoquent et les
+ * jauges se vident. Le résultat est déjà connu à ce moment-là — il vient du
+ * serveur — mais rien ne l'annonce encore à l'écran.
+ */
+type Phase = "selection" | "combat" | "resultat";
 
 const MISES = [10, 25, 50, 100];
+
+/**
+ * Temps d'affichage du combat : la descente des jauges, plus un souffle avant
+ * l'annonce.
+ *
+ * Durée unique, identique pour tout le monde. « prefers-reduced-motion » ne la
+ * raccourcit pas : le combat est le contenu de cet écran, pas une transition
+ * qu'on pourrait sauter. Ce que le réglage désactive, ce sont les effets
+ * décoratifs, et globals.css s'en charge déjà.
+ */
+function dureeDuCombat(): number {
+  return DUREE_PV + 1_000;
+}
+
+/** Promesse résolue après `ms` millisecondes. */
+function attendre(ms: number): Promise<void> {
+  return new Promise((resoudre) => setTimeout(resoudre, ms));
+}
 
 /** Étapes du fil d'Ariane. Un visiteur ne parie pas : il en a une de moins. */
 const ETAPES_JOUEUR = ["Combattant 1", "Combattant 2", "Pari", "Combat"];
@@ -63,6 +86,10 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
   const [pariJoue, setPariJoue] = useState<PariEngage | null>(null);
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+
+  // Le bouton « Lancer le combat » est en bas de page, l'arène tout en haut :
+  // sans ce repère, le combat se jouerait hors de l'écran du joueur.
+  const arene = useRef<HTMLElement>(null);
 
   // Les cotes sont mémorisées avec la paire à laquelle elles appartiennent.
   const [cotesRecues, setCotesRecues] = useState<{
@@ -149,6 +176,14 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
     setErreur(null);
     setEnCours(true);
 
+    // Remonter AVANT la requête : le défilement se termine pendant que le
+    // serveur résout le combat, et les jauges sont à l'écran quand elles
+    // commencent à descendre.
+    arene.current?.scrollIntoView({
+      behavior: mouvementReduit() ? "auto" : "smooth",
+      block: "start",
+    });
+
     // Le pari est figé ici, avant que le combat ne modifie le solde. Le relire
     // après coup donnerait une mise incohérente : miseValide se compare aux
     // points restants, qui viennent justement de changer.
@@ -183,10 +218,17 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
         throw new Error(donnees.error?.message ?? "Le combat n'a pas pu être lancé.");
       }
 
-      // Affichage immédiat ; router.refresh() ramène ensuite les données
-      // serveur (bilans des objets, classement) qui font foi.
-      appliquerCombatServeur(donnees.combat, donnees.joueur ?? null);
+      // Le combat se joue d'abord à l'écran : les jauges partent de PV_MAX et
+      // descendent vers les PV renvoyés par le serveur.
       setResultat(resultatDepuisCombat(donnees.combat, fighterA));
+      setPhase("combat");
+
+      await attendre(dureeDuCombat());
+
+      // Le solde n'est mis à jour qu'une fois la passe d'armes finie : appliqué
+      // plus tôt, le compteur de points de l'en-tête annoncerait le gain ou la
+      // perte avant que les jauges aient fini de descendre.
+      appliquerCombatServeur(donnees.combat, donnees.joueur ?? null);
       setPhase("resultat");
       router.refresh();
     } catch (probleme) {
@@ -266,7 +308,8 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
       {/* ---------------------------------------------------------------- */}
       {/* Arène : les deux emplacements face à face                         */}
       {/* ---------------------------------------------------------------- */}
-      <section aria-labelledby="titre-arene" className="relative">
+      {/* scroll-mt dégage la hauteur de l'en-tête, qui est collant. */}
+      <section ref={arene} aria-labelledby="titre-arene" className="relative scroll-mt-24">
         <h2 id="titre-arene" className="sr-only">
           Arène de combat
         </h2>
@@ -276,19 +319,19 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
             slot="A"
             combatant={fighterA}
             active={activeSlot === "A" && phase === "selection"}
-            attacking={phase === "resultat"}
+            attacking={phase === "combat"}
             pv={resultat ? resultat.pvA : PV_MAX}
-            pvAnimes={phase === "resultat"}
+            pvAnimes={phase !== "selection"}
             onSelect={() => setActiveSlot("A")}
             onClear={() => setFighterA(null)}
-            disabled={phase === "resultat"}
+            disabled={phase !== "selection"}
           />
 
           <div className="flex items-center justify-center py-2 md:px-2">
             <p
               aria-hidden="true"
               className={`skew-title font-display text-5xl text-arcade-orange md:text-6xl ${
-                phase === "resultat" ? "animate-glow" : ""
+                phase !== "selection" ? "animate-glow" : ""
               }`}
             >
               VS
@@ -299,12 +342,12 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
             slot="B"
             combatant={fighterB}
             active={activeSlot === "B" && phase === "selection"}
-            attacking={phase === "resultat"}
+            attacking={phase === "combat"}
             pv={resultat ? resultat.pvB : PV_MAX}
-            pvAnimes={phase === "resultat"}
+            pvAnimes={phase !== "selection"}
             onSelect={() => setActiveSlot("B")}
             onClear={() => setFighterB(null)}
-            disabled={phase === "resultat"}
+            disabled={phase !== "selection"}
             mirrored
           />
         </div>
@@ -620,6 +663,18 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
             </p>
           </div>
         </>
+      ) : phase === "combat" ? (
+        /* -------------------------------------------------------------- */
+        /* Passe d'armes : ni roster ni verdict, seules les jauges parlent  */
+        /* -------------------------------------------------------------- */
+        <section className="mt-12 text-center" aria-live="polite">
+          <p className="skew-title animate-glow font-display text-4xl text-arcade-orange sm:text-5xl">
+            Combat en cours…
+          </p>
+          <p className="mt-3 font-mono text-xs tracking-[0.12em] text-white/50 uppercase">
+            Les coups pleuvent, les jauges tombent.
+          </p>
+        </section>
       ) : (
         <FightResult
           fighterA={fighterA!}

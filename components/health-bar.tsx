@@ -9,6 +9,27 @@ import { PV_MAX } from "@/lib/fight-engine";
  * jauge ne dépend d'aucune caractéristique, seulement de l'issue du combat.
  */
 
+/**
+ * Durée de la descente de la jauge, en millisecondes.
+ *
+ * Volontairement longue : le combat n'est pas une transition, c'est le moment
+ * qu'on regarde. Douze secondes laissent aussi la place à ce qui viendra s'y
+ * greffer plus tard — commentaires en direct, échanges de coups annoncés.
+ *
+ * Exportée pour que l'arène attende exactement la fin du vidage avant
+ * d'annoncer le résultat : une seule valeur à changer pour rallonger ou
+ * raccourcir le combat.
+ */
+export const DUREE_PV = 12_000;
+
+/** Vrai si le système demande de limiter les animations (accessibilité). */
+export function mouvementReduit(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
+
 /** Couleur de la jauge selon les PV restants (vert → or → rouge). */
 function couleur(pv: number): { barre: string; texte: string } {
   if (pv > 50) return { barre: "from-victory to-arcade-cyan", texte: "text-victory" };
@@ -86,27 +107,30 @@ export function HealthBar({
 }
 
 /**
- * Fait défiler les PV de `PV_MAX` jusqu'à la valeur finale. Sans animation
- * demandée — ou si le système la refuse — la valeur s'affiche directement.
+ * Fait défiler les PV de `PV_MAX` jusqu'à la valeur finale.
+ *
+ * Cette descente ne s'efface PAS devant « prefers-reduced-motion ». Elle n'est
+ * pas un ornement : c'est le déroulé du combat, la seule chose qui se passe à
+ * l'écran pendant ces douze secondes. La couper reviendrait à supprimer la
+ * fonctionnalité, pas à l'adoucir.
+ *
+ * Le réglage garde tout son effet sur ce qui est réellement décoratif — le
+ * tremblement des portraits, le halo du « VS » — que la règle
+ * @media (prefers-reduced-motion: reduce) de globals.css neutralise déjà.
  */
 function usePvAnimes(pv: number, anime: boolean): number {
   const [affiche, setAffiche] = useState(anime ? PV_MAX : pv);
 
   useEffect(() => {
-    const reduit =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    if (!anime || reduit || pv === PV_MAX) {
+    if (!anime || pv === PV_MAX) {
       setAffiche(pv);
       return;
     }
 
-    const DUREE = 1100;
     let debut: number | null = null;
     let frame = requestAnimationFrame(function etape(horodatage) {
       debut ??= horodatage;
-      const avancement = Math.min(1, (horodatage - debut) / DUREE);
+      const avancement = Math.min(1, (horodatage - debut) / DUREE_PV);
       setAffiche(Math.round(PV_MAX + (pv - PV_MAX) * avancement));
       if (avancement < 1) frame = requestAnimationFrame(etape);
     });

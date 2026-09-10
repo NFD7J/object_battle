@@ -1,4 +1,4 @@
-import { enCote } from "@/lib/fight-engine";
+import { PV_MAX, enCote } from "@/lib/fight-engine";
 import type { Cotes } from "@/lib/fight-engine";
 import type { Object } from "@/lib/types";
 
@@ -58,6 +58,51 @@ export function resolveFight(a: Object, b: Object): FightOutcome {
     scoreB,
     winnerId: (scoreA < scoreB + 5 && scoreA > scoreB - 5) ? null : scoreA > scoreB ? a.id : b.id,
   };
+}
+
+/* ===========================================================================
+   Points de vie affichés
+
+   La base n'enregistre pas de PV : elle garde les deux scores du combat. Les
+   jauges sont donc déduites après coup, ce qui évite deux colonnes de plus et
+   garde une seule source de vérité — reconstruire un combat de l'historique
+   donne exactement les jauges vues dans l'arène.
+
+   Le perdant tombe toujours à zéro : un combat se joue jusqu'au K.O. Ce qui
+   varie, c'est ce qu'il en coûte au vainqueur, proportionnel à l'écart entre
+   les deux scores : large victoire, jauge presque pleine ; victoire d'un
+   cheveu, vainqueur à l'agonie.
+
+   Un match nul se solde par un double K.O. : les deux scores se tiennent à
+   moins de 5 points, les deux jauges tombent à zéro.
+   =========================================================================== */
+
+/** PV restants des deux combattants à la fin du combat. */
+export type PvRestants = { pvA: number; pvB: number };
+
+/**
+ * Déduit les jauges de fin de combat des scores enregistrés.
+ *
+ * @param matchNul vrai quand aucun vainqueur n'a été désigné (double K.O.)
+ */
+export function pvDepuisScores(scoreA: number, scoreB: number, matchNul: boolean): PvRestants {
+  // Match nul : les deux se mettent mutuellement au tapis, personne ne sort
+  // debout.
+  if (matchNul) return { pvA: 0, pvB: 0 };
+
+  const aGagne = scoreA > scoreB;
+  const scoreGagnant = aGagne ? scoreA : scoreB;
+  const scorePerdant = aGagne ? scoreB : scoreA;
+
+  // Un score nul est possible en théorie (caractéristiques à zéro et aléatoire
+  // à zéro) : la garde évite la division par zéro.
+  const ecart = scoreGagnant > 0 ? (scoreGagnant - scorePerdant) / scoreGagnant : 0;
+
+  // Jamais zéro pour le vainqueur, sans quoi la jauge afficherait « K.O. » des
+  // deux côtés alors qu'un camp l'a emporté.
+  const pvGagnant = Math.max(1, Math.round(PV_MAX * ecart));
+
+  return aGagne ? { pvA: pvGagnant, pvB: 0 } : { pvA: 0, pvB: pvGagnant };
 }
 
 /* ===========================================================================
