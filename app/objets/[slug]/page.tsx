@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { CombatantPortrait, OverallBadge } from "@/components/combatant-card";
+import { CombatantPortrait, OverallBadge } from "@/components/object-card";
 import { HistoryList } from "@/components/history-list";
 import { StatList } from "@/components/stat-bar";
 import { Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";

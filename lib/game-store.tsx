@@ -11,7 +11,7 @@ import {
 
 import { deltaParis } from "@/lib/fight-engine";
 import type { Issue, ResultatCombat } from "@/lib/fight-engine";
-import type { Combatant, Fight, Player } from "@/lib/types";
+import type { Object, Fight, Player } from "@/lib/types";
 
 const CLE_STOCKAGE = "object-battle-partie";
 const VERSION = 1;
@@ -25,8 +25,8 @@ type EtatPartie = {
 };
 
 export type CombatAEnregistrer = {
-  fighterA: Combatant;
-  fighterB: Combatant;
+  fighterA: Object;
+  fighterB: Object;
   resultat: ResultatCombat;
   bet: Issue;
   mise: number;

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-import { CombatantPortrait, OverallBadge } from "@/components/combatant-card";
+import { CombatantPortrait, OverallBadge } from "@/components/object-card";
 import { HealthBar } from "@/components/health-bar";
 import { StatList } from "@/components/stat-bar";
 import { Panel, Tag, btn, btnLabel } from "@/components/ui";

@@ -37,8 +37,8 @@ export const STAT_HINTS: Record<keyof Stats, string> = {
   intelligence: "Lucidité pendant le combat",
 };
 
-/** Un combattant, c'est-à-dire une ligne de la table « objects ». */
-export type Combatant = {
+/** Un objet, c'est-à-dire une ligne de la table « objects ». */
+export type Object = {
   id: number;
   slug: string;
   name: string;
@@ -57,8 +57,8 @@ export type BetOutcome = "gain" | "perte" | "nul";
 /** Un combat passé, c'est-à-dire une ligne de la table « fights ». */
 export type Fight = {
   id: number;
-  fighterA: Combatant;
-  fighterB: Combatant;
+  fighterA: Object;
+  fighterB: Object;
   /** `null` en cas de match nul (double K.O.). */
   winnerId: number | null;
   /** PV restants du combattant A à la fin (0 = K.O.). */

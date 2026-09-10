@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { ObjectCard } from "@/components/combatant-card";
+import { ObjectCard } from "@/components/object-card";
 import { PageHeader, btn, btnLabel } from "@/components/ui";
 import { getAllObjects } from "@/lib/queries";
 
