@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { CombatantCard } from "@/components/combatant-card";
+import { ObjectCard } from "@/components/combatant-card";
 import { PageHeader, btn, btnLabel } from "@/components/ui";
-import { getCurrentPlayer } from "@/lib/auth";
-import { combatants as objetsDemo } from "@/lib/mock-data";
 import { getAllObjects } from "@/lib/queries";
 
 export const metadata: Metadata = {
@@ -14,8 +12,9 @@ export const metadata: Metadata = {
 };
 
 export default async function ObjetsPage() {
-  const joueur = await getCurrentPlayer();
-  const combatants = joueur ? await getAllObjects() : objetsDemo;
+  // Composant serveur : la requête part directement vers PostgreSQL, sans
+  // passer par /api/objets. Rien de tout ceci n'atteint le navigateur.
+  const combatants = await getAllObjects();
 
   return (
     <>
@@ -40,18 +39,20 @@ export default async function ObjetsPage() {
 
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <h2 className="sr-only">Liste des objets</h2>
-        {combatants.length > 0 ? (
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {combatants.map((combatant, index) => (
-              <li key={combatant.id}>
-                <CombatantCard combatant={combatant} priority={index < 3} />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="border border-edge bg-panel px-6 py-10 text-center text-white/60">
-            Aucun objet pour le moment.
-            {joueur ? " Ajoutez le premier combattant." : ""}
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {combatants.map((combatant, index) => (
+            <li key={combatant.id}>
+              <ObjectCard combatant={combatant} priority={index < 3} />
+            </li>
+          ))}
+        </ul>
+
+        {/* Invitation à compléter le roster */}
+        <div className="mt-10 border border-dashed border-edge bg-panel/50 px-6 py-10 text-center">
+          <h2 className="text-2xl text-white">Un objet vous manque ?</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-white/60">
+            Ajoutez son nom, son image et ses quatre caractéristiques : il
+            rejoindra l&apos;arène et pourra être sélectionné en combat.
           </p>
         )}
 

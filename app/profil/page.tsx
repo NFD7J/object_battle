@@ -1,13 +1,18 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
+<<<<<<< HEAD
 import { CombatantPortrait } from "@/components/combatant-card";
 import { FightRow } from "@/components/fight-row";
 import { PlayerAvatar } from "@/components/ranking-table";
 import { Panel, PageHeader, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
 import { getCurrentPlayer } from "@/lib/auth";
 import { getAllObjects, getFightsByPlayer, getPlayerRank } from "@/lib/queries";
+=======
+import { ProfilView } from "@/app/profil/profil-view";
+import { getCurrentPlayerId } from "@/lib/auth";
+import { getAllObjects } from "@/lib/queries";
+>>>>>>> dev
 
 export const metadata: Metadata = {
   title: "Profil",
@@ -16,19 +21,16 @@ export const metadata: Metadata = {
 };
 
 export default async function ProfilPage() {
-  const currentPlayer = await getCurrentPlayer();
-
   // Page réservée aux joueurs connectés.
-  if (!currentPlayer) {
+  if ((await getCurrentPlayerId()) === null) {
     redirect("/connexion");
   }
 
-  const [rang, derniersCombats, objets] = await Promise.all([
-    getPlayerRank(currentPlayer.id),
-    getFightsByPlayer(currentPlayer.id, 3),
-    getAllObjects(),
-  ]);
+  // Le solde, le palmarès et l'historique viennent du store de jeu, amorcé par
+  // le layout. Seul le catalogue d'objets est chargé ici.
+  const objets = await getAllObjects();
 
+<<<<<<< HEAD
   const tauxVictoire =
     currentPlayer.nbCombats === 0
       ? 0
@@ -220,4 +222,7 @@ export default async function ProfilPage() {
       </div>
     </>
   );
+=======
+  return <ProfilView objets={objets} />;
+>>>>>>> dev
 }

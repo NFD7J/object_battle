@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
+
 import { PlayerAvatar, RankingTable } from "@/components/ranking-table";
-import { PageHeader, Panel, SectionTitle, Tag } from "@/components/ui";
-import { useGame, useJoueur, useJoueurs } from "@/lib/game-store";
+import { PageHeader, Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
+import { useJoueur, useJoueurs, useGame } from "@/lib/game-store";
 
 /** Ordre d'affichage du podium : 2e à gauche, 1er au centre, 3e à droite. */
 const ORDRE_PODIUM = [1, 0, 2];
@@ -75,14 +77,14 @@ export function ClassementView() {
 
       <section className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <SectionTitle>Tous les joueurs</SectionTitle>
-        <RankingTable players={joueurs} currentPlayerId={connecte ? joueur.id : undefined} />
+        <RankingTable players={joueurs} currentPlayerId={joueur?.id} />
       </section>
 
-      {connecte ? (
-        <section aria-labelledby="titre-ma-place" className="mx-auto max-w-6xl px-4 pb-14 sm:px-6">
-          <h2 id="titre-ma-place" className="sr-only">
-            Votre position
-          </h2>
+      <section aria-labelledby="titre-ma-place" className="mx-auto max-w-6xl px-4 pb-14 sm:px-6">
+        <h2 id="titre-ma-place" className="sr-only">
+          Votre position
+        </h2>
+        {joueur ? (
           <Panel tone="violet" innerClassName="flex flex-wrap items-center gap-4 p-5">
             <PlayerAvatar player={joueur} size={48} />
             <div className="min-w-0 flex-1">
@@ -101,8 +103,29 @@ export function ClassementView() {
               </span>
             </p>
           </Panel>
-        </section>
-      ) : null}
+        ) : (
+          /* Visiteur non connecté : on l invite à rejoindre le classement. */
+          <Panel innerClassName="flex flex-wrap items-center gap-4 p-5">
+            <div className="min-w-0 flex-1">
+              <Tag className="bg-panel-soft text-arcade-cyan">Pas encore classé</Tag>
+              <p className="mt-2 font-display text-2xl text-white">
+                Créez un compte pour entrer au classement
+              </p>
+              <p className="mt-1 text-sm text-white/60">
+                Vous démarrez avec 1 000 points à miser sur les combats.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Link href="/inscription" className={`${btn.base} ${btn.secondary}`}>
+                <span className={btnLabel}>S&apos;inscrire</span>
+              </Link>
+              <Link href="/connexion" className={`${btn.base} ${btn.ghost}`}>
+                <span className={btnLabel}>Connexion</span>
+              </Link>
+            </div>
+          </Panel>
+        )}
+      </section>
     </>
   );
 }

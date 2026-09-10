@@ -4,17 +4,16 @@ import Link from "next/link";
 
 import { PlayerAvatar } from "@/components/ranking-table";
 import { Panel } from "@/components/ui";
-import { useCombatants, useGame, useJoueurs } from "@/lib/game-store";
+import { useGame, useJoueurs } from "@/lib/game-store";
 
 /** Compteurs de la bannière d'accueil, avec le nombre de combats à jour. */
-export function HeroStats() {
+export function HeroStats({ nbObjets }: { nbObjets: number }) {
   const { fights, joueurs } = useGame();
-  const combatants = useCombatants();
 
   return (
     <dl className="mt-10 grid max-w-lg grid-cols-3 gap-3">
       {[
-        { valeur: combatants.length, label: "Objets" },
+        { valeur: nbObjets, label: "Objets" },
         { valeur: fights.length, label: "Combats" },
         { valeur: joueurs.length, label: "Joueurs" },
       ].map((item) => (

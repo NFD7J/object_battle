@@ -7,50 +7,21 @@ import { HistoryList } from "@/components/history-list";
 import { StatList } from "@/components/stat-bar";
 import { Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
 import { getCurrentPlayer } from "@/lib/auth";
-import { combatants as objetsDemo, getCombatantBySlug } from "@/lib/mock-data";
-import { getFightsByObject, getObjectBySlug, getObjectSlugs } from "@/lib/queries";
-import type { Combatant, Fight } from "@/lib/types";
+import type { Object, Fight } from "@/lib/types";
+import { getObjectBySlug, getObjectSlugs } from "@/lib/queries";
 import { STAT_HINTS, STAT_KEYS, STAT_LABELS } from "@/lib/types";
 
 /** Une page statique par objet : URL propre du type /objets/marteau (§15). */
 export async function generateStaticParams() {
-  try {
-    const slugs = await getObjectSlugs();
-    if (slugs.length > 0) return slugs.map((slug) => ({ slug }));
-  } catch {
-    // Build sans base : on retombe sur le roster d'exemple.
-  }
-  return objetsDemo.map((combatant) => ({ slug: combatant.slug }));
-}
-
-async function chargerFiche(slug: string): Promise<{
-  combatant: Combatant;
-  combats: Fight[] | undefined;
-}> {
-  const joueur = await getCurrentPlayer();
-
-  if (joueur) {
-    const combatant = await getObjectBySlug(slug);
-    if (!combatant) notFound();
-    return {
-      combatant,
-      combats: await getFightsByObject(combatant.id),
-    };
-  }
-
-  const combatant = getCombatantBySlug(slug);
-  if (!combatant) notFound();
-  return { combatant, combats: undefined };
+  const slugs = await getObjectSlugs();
+  return slugs.map((slug) => ({ slug }));
 }
 
 export async function generateMetadata(
   props: PageProps<"/objets/[slug]">,
 ): Promise<Metadata> {
   const { slug } = await props.params;
-  const joueur = await getCurrentPlayer();
-  const combatant = joueur
-    ? await getObjectBySlug(slug)
-    : getCombatantBySlug(slug);
+  const combatant = await getObjectBySlug(slug);
 
   if (!combatant) {
     return { title: "Objet introuvable" };
@@ -64,7 +35,11 @@ export async function generateMetadata(
 
 export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">) {
   const { slug } = await props.params;
-  const { combatant, combats } = await chargerFiche(slug);
+  const combatant = await getObjectBySlug(slug);
+
+  if (!combatant) {
+    notFound();
+  }
 
   return (
     <>

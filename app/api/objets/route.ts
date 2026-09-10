@@ -23,7 +23,7 @@ export async function GET(): Promise<Response> {
  * {
  *   "name": "Marteau",
  *   "description": "…",
- *   "image": "https://….public.blob.vercel-storage.com/objets/marteau.png",
+ *   "image": "https://res.cloudinary.com/<cloud>/image/upload/…/marteau.png",
  *   "stats": { "puissance": 90, "resistance": 75, "rapidite": 50, "intelligence": 70 }
  * }
  *

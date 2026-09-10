@@ -13,8 +13,7 @@ import {
 
 import { deltaParis } from "@/lib/fight-engine";
 import type { Issue, ResultatCombat } from "@/lib/fight-engine";
-import { currentPlayer, fights as fightsInitiaux, combatants as objetsDemo } from "@/lib/mock-data";
-import type { Combatant, DonneesCompte, Fight, Player } from "@/lib/types";
+import type { Object, Fight, Player } from "@/lib/types";
 
 const CLE_STOCKAGE = "object-battle-partie";
 const VERSION = 1;
@@ -28,8 +27,8 @@ type EtatPartie = {
 };
 
 export type CombatAEnregistrer = {
-  fighterA: Combatant;
-  fighterB: Combatant;
+  fighterA: Object;
+  fighterB: Object;
   resultat: ResultatCombat;
   bet: Issue;
   mise: number;
@@ -38,19 +37,24 @@ export type CombatAEnregistrer = {
 
 type GameContextValue = EtatPartie & {
   connecte: boolean;
-  combatants: Combatant[];
-  joueurs: Player[];
-  joueur: Player;
+  combatants: Object[];
   enregistrerCombat: (entree: CombatAEnregistrer) => void;
-  appliquerCombatServeur: (combat: Fight, joueur: Player, objets?: Combatant[], classement?: Player[]) => void;
+  /** Joueur connecté tel que la base le connaît, ou null si personne ne l'est. */
+  joueur: Player | null;
+  /** Classement complet venant de la base. */
+  joueurs: Player[];
 };
 
-const ETAT_INITIAL: EtatPartie = {
-  points: currentPlayer.points,
-  maxPoints: currentPlayer.maxPoints,
-  nbVictoires: currentPlayer.nbVictoires,
-  nbCombats: currentPlayer.nbCombats,
-  fights: fightsInitiaux,
+/**
+ * État de repli, utilisé pour le rendu serveur et tant que le provider n'a pas
+ * transmis les données. Les vraies valeurs arrivent en props de GameProvider.
+ */
+const ETAT_VIDE: EtatPartie = {
+  points: 0,
+  maxPoints: 0,
+  nbVictoires: 0,
+  nbCombats: 0,
+  fights: [],
 };
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -112,11 +116,27 @@ function composerCombat(entree: CombatAEnregistrer, id: number): Fight {
 }
 
 const listeners = new Set<() => void>();
-let etatCourant: EtatPartie = ETAT_INITIAL;
+let etatCourant: EtatPartie = ETAT_VIDE;
+let dejaInitialise = false;
 
-if (typeof window !== "undefined") {
-  const sauvegarde = lireStockage();
-  if (sauvegarde) etatCourant = sauvegarde;
+/**
+ * Amorce le store avec les données du serveur, une seule fois.
+ * Une partie déjà sauvegardée dans le navigateur reprend la main si elle existe.
+ */
+function initialiser(joueur: Player | null, fightsInitiaux: Fight[]) {
+  if (dejaInitialise) return;
+  dejaInitialise = true;
+
+  const depuisServeur: EtatPartie = {
+    points: joueur?.points ?? 0,
+    maxPoints: joueur?.maxPoints ?? 0,
+    nbVictoires: joueur?.nbVictoires ?? 0,
+    nbCombats: joueur?.nbCombats ?? 0,
+    fights: fightsInitiaux,
+  };
+
+  const sauvegarde = typeof window !== "undefined" ? lireStockage() : null;
+  etatCourant = sauvegarde ?? depuisServeur;
 }
 
 function emit() {
@@ -135,7 +155,7 @@ function getSnapshot() {
 }
 
 function getServerSnapshot() {
-  return ETAT_INITIAL;
+  return etatCourant;
 }
 
 function setEtatDemo(updater: (precedent: EtatPartie) => EtatPartie) {
@@ -144,13 +164,21 @@ function setEtatDemo(updater: (precedent: EtatPartie) => EtatPartie) {
   emit();
 }
 
-function DemoProvider({
+export function GameProvider({
+  joueur,
+  joueurs,
+  fightsInitiaux,
   children,
-  classement,
 }: {
+  joueur: Player | null;
+  joueurs: Player[];
+  fightsInitiaux: Fight[];
   children: ReactNode;
-  classement: Player[];
 }) {
+  // Amorçage avant le premier rendu, pour que useSyncExternalStore lise déjà
+  // les bonnes valeurs. initialiser() ne fait rien aux appels suivants.
+  initialiser(joueur, fightsInitiaux);
+
   const etat = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const enregistrerCombat = useCallback((entree: CombatAEnregistrer) => {
@@ -170,28 +198,9 @@ function DemoProvider({
     });
   }, []);
 
-  const joueur = useMemo<Player>(
-    () => ({
-      ...currentPlayer,
-      points: etat.points,
-      maxPoints: etat.maxPoints,
-      nbVictoires: etat.nbVictoires,
-      nbCombats: etat.nbCombats,
-    }),
-    [etat.points, etat.maxPoints, etat.nbVictoires, etat.nbCombats],
-  );
-
-  const valeur = useMemo<GameContextValue>(
-    () => ({
-      ...etat,
-      connecte: false,
-      combatants: objetsDemo,
-      joueurs: classement,
-      joueur,
-      enregistrerCombat,
-      appliquerCombatServeur: () => {},
-    }),
-    [etat, joueur, classement, enregistrerCombat],
+  const valeur = useMemo(
+    () => ({ ...etat, enregistrerCombat, joueur, joueurs }),
+    [etat, enregistrerCombat, joueur, joueurs],
   );
 
   return <GameContext.Provider value={valeur}>{children}</GameContext.Provider>;
@@ -288,17 +297,24 @@ export function useGame(): GameContextValue {
   return contexte;
 }
 
-/** Joueur affiché : compte réel si connecté, joueur de démo sinon. */
-export function useJoueur(): Player {
-  return useGame().joueur;
+/**
+ * Joueur connecté, avec le solde et le palmarès à jour.
+ * Renvoie null quand personne n'est connecté.
+ */
+export function useJoueur(): Player | null {
+  const { joueur, points, maxPoints, nbVictoires, nbCombats } = useGame();
+  return useMemo(
+    () => (joueur ? { ...joueur, points, maxPoints, nbVictoires, nbCombats } : null),
+    [joueur, points, maxPoints, nbVictoires, nbCombats],
+  );
 }
 
 /** Classement réel, que le joueur soit connecté ou non. */
 export function useJoueurs(): Player[] {
-  return useGame().joueurs;
-}
-
-/** Roster : objets de la base si connecté, objets d'exemple sinon. */
-export function useCombatants(): Combatant[] {
-  return useGame().combatants;
+  const { joueurs } = useGame();
+  const joueur = useJoueur();
+  return useMemo(
+    () => joueurs.map((player) => (joueur && player.id === joueur.id ? joueur : player)),
+    [joueurs, joueur],
+  );
 }

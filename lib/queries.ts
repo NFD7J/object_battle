@@ -4,7 +4,7 @@ import { cache } from "react";
 
 import { COTE_NUL, COTE_OBJET } from "@/lib/combat";
 import { ConflictError, ValidationError, getSql } from "@/lib/db";
-import type { Combatant, Fight, Player, RankingSort, Stats } from "@/lib/types";
+import type { Object, Fight, Player, RankingSort, Stats } from "@/lib/types";
 
 /* ===========================================================================
    COUCHE D'ACCÈS AUX DONNÉES (Data Access Layer)
@@ -143,10 +143,10 @@ function toFight(row: FightRow): Fight {
     pvB: row.score_2,
     bet: {
       on: row.bet_on_id ?? "nul",
-      amount: mise,
-      cote,
-      outcome: delta > 0 ? "gain" : delta < 0 ? "perte" : "nul",
-      delta,
+      amount: row.bet_amount,
+      cote: row.bet_amount === 0 ? 0 : Math.abs(row.bet_delta / row.bet_amount),
+      outcome: row.bet_delta > 0 ? "gain" : row.bet_delta < 0 ? "perte" : "nul",
+      delta: row.bet_delta,
     },
     createdAt: toIsoDate(row.created_at),
   };
@@ -204,7 +204,7 @@ function identifiantValide(valeur: unknown, champ: string): number {
 
 /**
  * L'image doit être un chemin local (/objets/...) ou une URL https, typiquement
- * celle renvoyée par Vercel Blob (§7). On refuse tout le reste, notamment les
+ * celle renvoyée par Cloudinary (§7). On refuse tout le reste, notamment les
  * URL « javascript: » ou « data: ».
  */
 function imageValide(valeur: unknown): string {

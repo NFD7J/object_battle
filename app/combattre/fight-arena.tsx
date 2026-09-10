@@ -17,9 +17,8 @@ import {
   resoudreCombat,
 } from "@/lib/fight-engine";
 import type { Cotes, Issue, ResultatCombat } from "@/lib/fight-engine";
-import { COTE_NUL, COTE_OBJET } from "@/lib/combat";
-import { useCombatants, useGame } from "@/lib/game-store";
-import type { Combatant, Fight, Player } from "@/lib/types";
+import { useGame } from "@/lib/game-store";
+import type { Object } from "@/lib/types";
 
 type Slot = "A" | "B";
 type BetChoice = Issue;
@@ -40,7 +39,7 @@ type ReponseCombat = {
   error?: { message?: string };
 };
 
-function resultatDepuisCombat(combat: Fight, fighterA: Combatant): ResultatCombat {
+function resultatDepuisCombat(combat: Fight, fighterA: Object): ResultatCombat {
   const vainqueur: Issue =
     combat.winnerId === null ? "nul" : combat.winnerId === fighterA.id ? "A" : "B";
   return { vainqueur, pvA: combat.pvA, pvB: combat.pvB };
@@ -53,13 +52,9 @@ function resultatDepuisCombat(combat: Fight, fighterA: Combatant): ResultatComba
    Compte : le serveur calcule le combat et l'enregistre.
    ========================================================================== */
 
-export function FightArena() {
-  const router = useRouter();
-  const combatants = useCombatants();
-  const { points, connecte, enregistrerCombat, appliquerCombatServeur } = useGame();
-
-  const [fighterA, setFighterA] = useState<Combatant | null>(combatants[0] ?? null);
-  const [fighterB, setFighterB] = useState<Combatant | null>(null);
+export function FightArena({ combatants }: { combatants: Object[] }) {
+  const [fighterA, setFighterA] = useState<Object | null>(combatants[0] ?? null);
+  const [fighterB, setFighterB] = useState<Object | null>(null);
   const [activeSlot, setActiveSlot] = useState<Slot>("B");
   const [bet, setBet] = useState<BetChoice | null>(null);
   const [mise, setMise] = useState<number>(25);

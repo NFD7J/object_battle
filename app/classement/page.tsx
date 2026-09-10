@@ -9,5 +9,7 @@ export const metadata: Metadata = {
 };
 
 export default function ClassementPage() {
+  // Le classement et le joueur courant viennent du store de jeu, amorcé par le
+  // layout avec getRanking() et getCurrentPlayer(). Rien à charger de plus ici.
   return <ClassementView />;
 }

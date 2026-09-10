@@ -1,0 +1,13 @@
+# Fins de ligne : LF partout, dans le dépôt comme dans les dossiers de travail.
+# Sans ce fichier, chaque poste dépend de son propre core.autocrlf : un collègue
+# mal configuré peut réécrire les 200 lignes d'un fichier pour un seul mot changé.
+* text=auto eol=lf
+
+# Fichiers binaires : git ne doit jamais y toucher.
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.woff binary
+*.woff2 binary

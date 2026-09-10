@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { StatList } from "@/components/stat-bar";
 import { Panel, Tag, btn, btnLabel } from "@/components/ui";
-import type { Combatant } from "@/lib/types";
+import type { Object } from "@/lib/types";
 
 /**
  * Portrait encadré d'un objet. L'image vient de /public pour l'instant ;
@@ -15,7 +15,7 @@ export function CombatantPortrait({
   sizes = "160px",
   priority = false,
 }: {
-  combatant: Combatant;
+  combatant: Object;
   className?: string;
   sizes?: string;
   priority?: boolean;
@@ -40,7 +40,7 @@ export function CombatantPortrait({
   );
 }
 
-/** Pastille du score global, affichée en haut à droite des cartes. */
+/** Pastille du score global, pas affichée en haut à droite des cartes. */
 export function OverallBadge({ value }: { value: number }) {
   return (
     <span className="flex -skew-x-6 items-center gap-1.5 bg-linear-to-r from-arcade-orange to-arcade-gold px-3 py-1 text-void">
@@ -63,7 +63,7 @@ export function ObjectCard({
   combatant,
   priority = false,
 }: {
-  combatant: Combatant;
+  combatant: Object;
   priority?: boolean;
 }) {
   return (
@@ -75,9 +75,6 @@ export function ObjectCard({
           sizes="(min-width: 1024px) 300px, (min-width: 640px) 45vw, 90vw"
           priority={priority}
         />
-        <div className="absolute top-3 right-3">
-          <OverallBadge value={combatant.overall} />
-        </div>
       </div>
 
       <div className="flex flex-1 flex-col gap-4 border-t border-edge p-4">
