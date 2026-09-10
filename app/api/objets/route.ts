@@ -1,4 +1,5 @@
-import { handleApiError, readJsonBody } from "@/lib/api";
+import { apiError, handleApiError, readJsonBody } from "@/lib/api";
+import { getCurrentPlayerId } from "@/lib/auth";
 import { createObject, getAllObjects } from "@/lib/queries";
 
 /**
@@ -32,6 +33,16 @@ export async function GET(): Promise<Response> {
  */
 export async function POST(request: Request): Promise<Response> {
   try {
+    const playerId = await getCurrentPlayerId();
+
+    if (playerId === null) {
+      return apiError(
+        401,
+        "NON_AUTHENTIFIE",
+        "Connectez-vous pour ajouter un objet.",
+      );
+    }
+
     const body = await readJsonBody(request);
 
     const objet = await createObject({

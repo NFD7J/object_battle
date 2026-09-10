@@ -5,6 +5,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getCurrentPlayer } from "@/lib/auth";
 import { GameProvider } from "@/lib/game-store";
+import { chargerClassement, chargerDonneesCompte } from "@/lib/vue-data";
 
 import "./globals.css";
 
@@ -54,6 +55,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // Lire la session ici rend toutes les pages dynamiques : c'est le prix à
   // payer pour que l'en-tête affiche le bon joueur dès le premier rendu.
   const joueur = await getCurrentPlayer();
+  const [classement, initiales] = await Promise.all([
+    chargerClassement(),
+    joueur ? chargerDonneesCompte(joueur.id) : Promise.resolve(null),
+  ]);
 
   return (
     <html
@@ -61,18 +66,18 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} ${anton.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-void">
-        <GameProvider>
+        <GameProvider joueur={joueur} initiales={initiales} classement={classement}>
           <a
             href="#contenu"
             className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-100 focus:bg-arcade-gold focus:px-4 focus:py-2 focus:font-bold focus:text-void"
           >
             Aller au contenu principal
           </a>
-          <SiteHeader player={joueur}/>
+          <SiteHeader player={joueur} />
           <main id="contenu" className="flex-1">
             {children}
           </main>
-          <SiteFooter />
+          <SiteFooter connecte={Boolean(joueur)} />
         </GameProvider>
       </body>
     </html>

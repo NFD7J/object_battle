@@ -1,6 +1,7 @@
 import { put } from "@vercel/blob";
 
 import { apiError, handleApiError } from "@/lib/api";
+import { getCurrentPlayerId } from "@/lib/auth";
 
 /* ===========================================================================
    POST /api/upload?filename=marteau.png
@@ -45,6 +46,16 @@ function nomDeFichierSur(nomBrut: string, extension: string): string {
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const playerId = await getCurrentPlayerId();
+
+    if (playerId === null) {
+      return apiError(
+        401,
+        "NON_AUTHENTIFIE",
+        "Connectez-vous pour envoyer une image.",
+      );
+    }
+
     const filename = new URL(request.url).searchParams.get("filename");
 
     if (!filename) {

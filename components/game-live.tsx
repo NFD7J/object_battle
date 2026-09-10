@@ -4,19 +4,19 @@ import Link from "next/link";
 
 import { PlayerAvatar } from "@/components/ranking-table";
 import { Panel } from "@/components/ui";
-import { useGame, useJoueurs } from "@/lib/game-store";
-import { combatants, players } from "@/lib/mock-data";
+import { useCombatants, useGame, useJoueurs } from "@/lib/game-store";
 
 /** Compteurs de la bannière d'accueil, avec le nombre de combats à jour. */
 export function HeroStats() {
-  const { fights } = useGame();
+  const { fights, joueurs } = useGame();
+  const combatants = useCombatants();
 
   return (
     <dl className="mt-10 grid max-w-lg grid-cols-3 gap-3">
       {[
         { valeur: combatants.length, label: "Objets" },
         { valeur: fights.length, label: "Combats" },
-        { valeur: players.length, label: "Joueurs" },
+        { valeur: joueurs.length, label: "Joueurs" },
       ].map((item) => (
         <div
           key={item.label}
@@ -38,6 +38,14 @@ export function HeroStats() {
 export function TopPlayersPreview({ limit = 4 }: { limit?: number }) {
   const joueurs = useJoueurs();
   const topJoueurs = [...joueurs].sort((a, b) => b.points - a.points).slice(0, limit);
+
+  if (topJoueurs.length === 0) {
+    return (
+      <p className="relative mt-5 text-sm text-white/55">
+        Aucun joueur classé pour le moment. Créez un compte pour apparaître ici.
+      </p>
+    );
+  }
 
   return (
     <ol className="relative mt-5 grid gap-2.5">

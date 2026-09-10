@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import { CombatantPortrait, OverallBadge } from "@/components/combatant-card";
@@ -16,9 +17,9 @@ import {
   resoudreCombat,
 } from "@/lib/fight-engine";
 import type { Cotes, Issue, ResultatCombat } from "@/lib/fight-engine";
-import { useGame } from "@/lib/game-store";
-import { combatants } from "@/lib/mock-data";
-import type { Combatant } from "@/lib/types";
+import { COTE_NUL, COTE_OBJET } from "@/lib/combat";
+import { useCombatants, useGame } from "@/lib/game-store";
+import type { Combatant, Fight, Player } from "@/lib/types";
 
 type Slot = "A" | "B";
 type BetChoice = Issue;
@@ -33,16 +34,31 @@ const ETAPES = [
   "Combat",
 ];
 
+type ReponseCombat = {
+  combat?: Fight;
+  joueur?: Player;
+  error?: { message?: string };
+};
+
+function resultatDepuisCombat(combat: Fight, fighterA: Combatant): ResultatCombat {
+  const vainqueur: Issue =
+    combat.winnerId === null ? "nul" : combat.winnerId === fighterA.id ? "A" : "B";
+  return { vainqueur, pvA: combat.pvA, pvB: combat.pvB };
+}
+
 /* ==========================================================================
    Écran « Combattre » — sélection, pari, résultat.
 
-   L'issue du combat est tirée au sort par `resoudreCombat()` : les stats ne
-   décident de rien. Elles servent uniquement à établir les cotes du pari.
-   L'enregistrement en base (§10) viendra plus tard.
+   Invité : l'issue est tirée au sort localement (données d'exemple).
+   Compte : le serveur calcule le combat et l'enregistre.
    ========================================================================== */
 
 export function FightArena() {
-  const [fighterA, setFighterA] = useState<Combatant | null>(combatants[0]);
+  const router = useRouter();
+  const combatants = useCombatants();
+  const { points, connecte, enregistrerCombat, appliquerCombatServeur } = useGame();
+
+  const [fighterA, setFighterA] = useState<Combatant | null>(combatants[0] ?? null);
   const [fighterB, setFighterB] = useState<Combatant | null>(null);
   const [activeSlot, setActiveSlot] = useState<Slot>("B");
   const [bet, setBet] = useState<BetChoice | null>(null);
@@ -51,32 +67,89 @@ export function FightArena() {
   const [phase, setPhase] = useState<Phase>("selection");
   const [resultat, setResultat] = useState<ResultatCombat | null>(null);
   const [soldeAvant, setSoldeAvant] = useState<number | null>(null);
-  const { points, enregistrerCombat } = useGame();
+  const [enCours, setEnCours] = useState(false);
+  const [erreur, setErreur] = useState<string | null>(null);
 
-  const cotes = useMemo(() => calculerCotes(fighterA, fighterB), [fighterA, fighterB]);
+  const cotes = useMemo(() => {
+    if (!fighterA || !fighterB) return null;
+    if (connecte) {
+      return { A: COTE_OBJET, B: COTE_OBJET, nul: COTE_NUL } satisfies Cotes;
+    }
+    return calculerCotes(fighterA, fighterB);
+  }, [connecte, fighterA, fighterB]);
 
   const miseAbordable =
     mise <= points ? mise : ([...MISES].reverse().find((montant) => montant <= points) ?? mise);
 
   const pretAuCombat =
-    fighterA !== null && fighterB !== null && bet !== null && miseAbordable <= points;
+    fighterA !== null && fighterB !== null && bet !== null && miseAbordable <= points && !enCours;
 
   const etapeCourante = !fighterA ? 0 : !fighterB ? 1 : !bet ? 2 : 3;
 
-  function lancerLeCombat() {
+  async function lancerLeCombat() {
     if (!fighterA || !fighterB || !bet || !cotes || miseAbordable > points) return;
-    const tirage = resoudreCombat();
+
+    if (!connecte) {
+      const tirage = resoudreCombat();
+      setSoldeAvant(points);
+      enregistrerCombat({
+        fighterA,
+        fighterB,
+        resultat: tirage,
+        bet,
+        mise: miseAbordable,
+        cote: cotes[bet],
+      });
+      setResultat(tirage);
+      setPhase("resultat");
+      return;
+    }
+
+    setErreur(null);
+    setEnCours(true);
     setSoldeAvant(points);
-    enregistrerCombat({
-      fighterA,
-      fighterB,
-      resultat: tirage,
-      bet,
-      mise: miseAbordable,
-      cote: cotes[bet],
-    });
-    setResultat(tirage);
-    setPhase("resultat");
+
+    try {
+      const reponse = await fetch("/api/combats", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          object1Id: fighterA.id,
+          object2Id: fighterB.id,
+          betOn: bet === "nul" ? "nul" : bet === "A" ? fighterA.id : fighterB.id,
+          amount: miseAbordable,
+        }),
+      });
+
+      const donnees: ReponseCombat = await reponse.json();
+
+      if (!reponse.ok || !donnees.combat || !donnees.joueur) {
+        throw new Error(donnees.error?.message ?? "Le combat n'a pas pu être lancé.");
+      }
+
+      const [objetsRes, classementRes] = await Promise.all([
+        fetch("/api/objets"),
+        fetch("/api/classement"),
+      ]);
+      const objetsJson: { objets?: Combatant[] } = await objetsRes.json();
+      const classementJson: { joueurs?: Player[] } = await classementRes.json();
+
+      appliquerCombatServeur(
+        donnees.combat,
+        donnees.joueur,
+        objetsJson.objets,
+        classementJson.joueurs,
+      );
+      setResultat(resultatDepuisCombat(donnees.combat, fighterA));
+      setPhase("resultat");
+      router.refresh();
+    } catch (probleme) {
+      setErreur(
+        probleme instanceof Error ? probleme.message : "Une erreur est survenue, réessayez.",
+      );
+    } finally {
+      setEnCours(false);
+    }
   }
 
   function choisir(combatant: Combatant) {
@@ -421,11 +494,16 @@ export function FightArena() {
             <button
               type="button"
               disabled={!pretAuCombat}
-              onClick={lancerLeCombat}
+              onClick={() => void lancerLeCombat()}
               className={`${btn.base} ${btn.primary} !px-12 !py-5 text-2xl disabled:cursor-not-allowed disabled:from-edge disabled:to-edge disabled:text-white/40 disabled:shadow-none`}
             >
-              <span className={btnLabel}>Lancer le combat</span>
+              <span className={btnLabel}>{enCours ? "Combat en cours…" : "Lancer le combat"}</span>
             </button>
+            {erreur ? (
+              <p className="mt-3 font-mono text-sm text-defeat" role="alert">
+                {erreur}
+              </p>
+            ) : null}
             <p className="mt-3 font-mono text-xs text-white/45" aria-live="polite">
               {points < Math.min(...MISES)
                 ? "Plus assez de points pour miser. Les prochains paris devront attendre."

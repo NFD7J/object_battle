@@ -2,6 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 
+import { COTE_NUL, COTE_OBJET } from "@/lib/combat";
 import { ConflictError, ValidationError, getSql } from "@/lib/db";
 import type { Combatant, Fight, Player, RankingSort, Stats } from "@/lib/types";
 
@@ -122,18 +123,30 @@ function toPlayer(row: UserRow): Player {
 }
 
 function toFight(row: FightRow): Fight {
+  const mise = row.bet_amount;
+  const delta = row.bet_delta;
+  // La cote n'est pas stockée : on la reconstitue à partir du gain, sinon
+  // on retombe sur les multiplicateurs du moteur de combat.
+  const cote =
+    delta > 0 && mise > 0
+      ? Math.round((delta / mise) * 100) / 100
+      : row.bet_on_id == null
+        ? COTE_NUL
+        : COTE_OBJET;
+
   return {
     id: row.id,
     fighterA: toCombatant(row.fighter_a),
     fighterB: toCombatant(row.fighter_b),
     winnerId: row.winner_id,
-    scoreA: row.score_1,
-    scoreB: row.score_2,
+    pvA: row.score_1,
+    pvB: row.score_2,
     bet: {
       on: row.bet_on_id ?? "nul",
-      amount: row.bet_amount,
-      outcome: row.bet_delta > 0 ? "gain" : row.bet_delta < 0 ? "perte" : "nul",
-      delta: row.bet_delta,
+      amount: mise,
+      cote,
+      outcome: delta > 0 ? "gain" : delta < 0 ? "perte" : "nul",
+      delta,
     },
     createdAt: toIsoDate(row.created_at),
   };

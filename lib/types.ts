@@ -90,3 +90,10 @@ export type Player = {
 
 /** Critères de tri du classement (§4.4). */
 export type RankingSort = "points" | "victoires" | "ratio";
+
+/** Données réelles chargées pour un joueur connecté. */
+export type DonneesCompte = {
+  objets: Combatant[];
+  joueurs: Player[];
+  combats: Fight[];
+};

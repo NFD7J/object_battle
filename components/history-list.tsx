@@ -16,8 +16,9 @@ const FILTRES: { key: Filtre; label: string }[] = [
 ];
 
 /** Résumé chiffré de l'historique, branché sur le solde live. */
-export function HistoriqueResume() {
-  const { fights } = useGame();
+export function HistoriqueResume({ fights: fightsProp }: { fights?: Fight[] } = {}) {
+  const { fights: fightsStore } = useGame();
+  const fights = fightsProp ?? fightsStore;
   const nbGains = fights.filter((fight) => fight.bet.outcome === "gain").length;
   const nbPertes = fights.filter((fight) => fight.bet.outcome === "perte").length;
 
@@ -51,6 +52,7 @@ export function HistoryList({
   filtres = true,
   emptyTitle = "Aucun combat ici",
   emptyText = "Changez de filtre ou lancez un nouveau combat.",
+  fights: fightsProp,
 }: {
   compact?: boolean;
   limit?: number;
@@ -58,8 +60,10 @@ export function HistoryList({
   filtres?: boolean;
   emptyTitle?: string;
   emptyText?: string;
+  fights?: Fight[];
 }) {
-  const { fights } = useGame();
+  const { fights: fightsStore } = useGame();
+  const fights = fightsProp ?? fightsStore;
   const [filtre, setFiltre] = useState<Filtre>("tous");
 
   let liste = fights;

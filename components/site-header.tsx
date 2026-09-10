@@ -4,9 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
-import type { Player } from "@/lib/types";
-import { currentPlayer } from "@/lib/mock-data";
 import { useGame } from "@/lib/game-store";
+import type { Player } from "@/lib/types";
 
 const NAV_LINKS = [
   { href: "/", label: "Accueil" },
@@ -22,7 +21,7 @@ export function SiteHeader({ player }: { player: Player | null }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [deconnexionEnCours, setDeconnexionEnCours] = useState(false);
-  const { points } = useGame();
+  const { points, connecte } = useGame();
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -93,7 +92,7 @@ export function SiteHeader({ player }: { player: Player | null }) {
                 &#9670;
               </span>
               <span className="font-mono text-sm font-bold text-arcade-gold">
-                {player.points.toLocaleString("fr-FR")}
+                {(connecte ? points : player.points).toLocaleString("fr-FR")}
               </span>
               <span className="sr-only">points disponibles</span>
               <span
@@ -188,7 +187,7 @@ export function SiteHeader({ player }: { player: Player | null }) {
           {player ? (
             <>
               <p className="font-mono text-sm text-arcade-gold">
-                &#9670; {player.points.toLocaleString("fr-FR")} points
+                &#9670; {(connecte ? points : player.points).toLocaleString("fr-FR")} points
               </p>
               <button
                 type="button"

@@ -3,14 +3,22 @@ import Link from "next/link";
 const FOOTER_LINKS = [
   { href: "/combattre", label: "Combattre" },
   { href: "/objets", label: "Objets" },
-  { href: "/objets/nouveau", label: "Ajouter un objet" },
   { href: "/classement", label: "Classement" },
   { href: "/historique", label: "Historique" },
   { href: "/profil", label: "Profil" },
   { href: "/a-propos", label: "À propos" },
-];
+] as const;
 
-export function SiteFooter() {
+export function SiteFooter({ connecte = false }: { connecte?: boolean }) {
+  const liens = connecte
+    ? [
+        FOOTER_LINKS[0],
+        FOOTER_LINKS[1],
+        { href: "/objets/nouveau", label: "Ajouter un objet" },
+        ...FOOTER_LINKS.slice(2),
+      ]
+    : FOOTER_LINKS;
+
   return (
     <footer className="mt-auto border-t border-edge bg-abyss">
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[1.4fr_1fr]">
@@ -30,7 +38,7 @@ export function SiteFooter() {
             Navigation
           </h2>
           <ul className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2">
-            {FOOTER_LINKS.map((link) => (
+            {liens.map((link) => (
               <li key={link.href}>
                 <Link
                   href={link.href}

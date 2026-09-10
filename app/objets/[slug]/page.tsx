@@ -6,19 +6,51 @@ import { CombatantPortrait, OverallBadge } from "@/components/combatant-card";
 import { HistoryList } from "@/components/history-list";
 import { StatList } from "@/components/stat-bar";
 import { Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
-import { combatants, getCombatantBySlug } from "@/lib/mock-data";
+import { getCurrentPlayer } from "@/lib/auth";
+import { combatants as objetsDemo, getCombatantBySlug } from "@/lib/mock-data";
+import { getFightsByObject, getObjectBySlug, getObjectSlugs } from "@/lib/queries";
+import type { Combatant, Fight } from "@/lib/types";
 import { STAT_HINTS, STAT_KEYS, STAT_LABELS } from "@/lib/types";
 
 /** Une page statique par objet : URL propre du type /objets/marteau (§15). */
-export function generateStaticParams() {
-  return combatants.map((combatant) => ({ slug: combatant.slug }));
+export async function generateStaticParams() {
+  try {
+    const slugs = await getObjectSlugs();
+    if (slugs.length > 0) return slugs.map((slug) => ({ slug }));
+  } catch {
+    // Build sans base : on retombe sur le roster d'exemple.
+  }
+  return objetsDemo.map((combatant) => ({ slug: combatant.slug }));
+}
+
+async function chargerFiche(slug: string): Promise<{
+  combatant: Combatant;
+  combats: Fight[] | undefined;
+}> {
+  const joueur = await getCurrentPlayer();
+
+  if (joueur) {
+    const combatant = await getObjectBySlug(slug);
+    if (!combatant) notFound();
+    return {
+      combatant,
+      combats: await getFightsByObject(combatant.id),
+    };
+  }
+
+  const combatant = getCombatantBySlug(slug);
+  if (!combatant) notFound();
+  return { combatant, combats: undefined };
 }
 
 export async function generateMetadata(
   props: PageProps<"/objets/[slug]">,
 ): Promise<Metadata> {
   const { slug } = await props.params;
-  const combatant = getCombatantBySlug(slug);
+  const joueur = await getCurrentPlayer();
+  const combatant = joueur
+    ? await getObjectBySlug(slug)
+    : getCombatantBySlug(slug);
 
   if (!combatant) {
     return { title: "Objet introuvable" };
@@ -32,15 +64,7 @@ export async function generateMetadata(
 
 export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">) {
   const { slug } = await props.params;
-  const combatant = getCombatantBySlug(slug);
-
-  if (!combatant) {
-    notFound();
-  }
-
-  const autresObjets = combatants
-    .filter((autre) => autre.id !== combatant.id)
-    .slice(0, 3);
+  const { combatant, combats } = await chargerFiche(slug);
 
   return (
     <>
@@ -188,6 +212,7 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
             compact
             combatantId={combatant.id}
             filtres={false}
+            fights={combats}
             emptyTitle="Aucun combat ici"
             emptyText="Cet objet n'est encore jamais monté sur le ring."
           />

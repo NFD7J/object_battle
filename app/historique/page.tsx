@@ -27,7 +27,10 @@ export default function HistoriquePage() {
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
         <HistoriqueResume />
         <h2 className="sr-only">Liste des combats</h2>
-        <HistoryList />
+        <HistoryList
+          emptyTitle="Aucun combat pour le moment"
+          emptyText="Choisissez deux objets et lancez votre premier round."
+        />
       </div>
     </>
   );

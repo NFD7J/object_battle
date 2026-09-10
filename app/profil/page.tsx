@@ -9,8 +9,6 @@ import { Panel, PageHeader, SectionTitle, Tag, btn, btnLabel } from "@/component
 import { getCurrentPlayer } from "@/lib/auth";
 import { getAllObjects, getFightsByPlayer, getPlayerRank } from "@/lib/queries";
 
-import { ProfilView } from "@/app/profil/profil-view";
-
 export const metadata: Metadata = {
   title: "Profil",
   description:
@@ -36,7 +34,10 @@ export default async function ProfilPage() {
       ? 0
       : Math.round((currentPlayer.nbVictoires / currentPlayer.nbCombats) * 100);
 
-  const objetsFavoris = objets.slice(0, 3);
+  const objetsFavoris = [...objets]
+    .sort((a, b) => b.nbWins - a.nbWins)
+    .filter((objet) => objet.nbWins > 0)
+    .slice(0, 3);
 
   const chiffres = [
     { label: "Points", valeur: currentPlayer.points.toLocaleString("fr-FR"), couleur: "text-arcade-gold" },
@@ -151,29 +152,40 @@ export default async function ProfilPage() {
           <SectionTitle href="/objets" linkLabel="Tout le roster">
             Objets les plus joués
           </SectionTitle>
-          <ul className="grid gap-3 sm:grid-cols-3">
-            {objetsFavoris.map((combatant) => (
-              <li key={combatant.id}>
-                <Link href={`/objets/${combatant.slug}`} className="block">
-                  <Panel innerClassName="flex items-center gap-4 p-4 transition-colors hover:bg-panel-soft">
-                    <CombatantPortrait
-                      combatant={combatant}
-                      className="cut-corner-sm h-16 w-16 shrink-0"
-                      sizes="64px"
-                    />
-                    <span>
-                      <span className="block font-display text-xl text-white">
-                        {combatant.name}
+          {objetsFavoris.length > 0 ? (
+            <ul className="grid gap-3 sm:grid-cols-3">
+              {objetsFavoris.map((combatant) => (
+                <li key={combatant.id}>
+                  <Link href={`/objets/${combatant.slug}`} className="block">
+                    <Panel innerClassName="flex items-center gap-4 p-4 transition-colors hover:bg-panel-soft">
+                      <CombatantPortrait
+                        combatant={combatant}
+                        className="cut-corner-sm h-16 w-16 shrink-0"
+                        sizes="64px"
+                      />
+                      <span>
+                        <span className="block font-display text-xl text-white">
+                          {combatant.name}
+                        </span>
+                        <span className="block font-mono text-xs text-white/50">
+                          {combatant.nbWins} victoires
+                        </span>
                       </span>
-                      <span className="block font-mono text-xs text-white/50">
-                        {combatant.nbWins} victoires
-                      </span>
-                    </span>
-                  </Panel>
-                </Link>
-              </li>
-            ))}
-          </ul>
+                    </Panel>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <Panel innerClassName="p-8 text-center">
+              <p className="font-display text-2xl text-white/60">
+                Pas encore de favori
+              </p>
+              <p className="mt-2 text-sm text-white/50">
+                Les objets avec lesquels vous gagnez apparaîtront ici.
+              </p>
+            </Panel>
+          )}
         </section>
 
         {/* ---------------------------------------------------------------- */}
@@ -208,5 +220,4 @@ export default async function ProfilPage() {
       </div>
     </>
   );
-  return <ProfilView />;
 }
