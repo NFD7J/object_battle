@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { CombatantPortrait } from "@/components/combatant-card";
+import { CombatantPortrait } from "@/components/object-card";
 import { HistoryList } from "@/components/history-list";
 import { PlayerAvatar } from "@/components/ranking-table";
 import { Panel, PageHeader, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";

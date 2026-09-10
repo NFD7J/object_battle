@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { CombatantPortrait } from "@/components/combatant-card";
+import { CombatantPortrait } from "@/components/object-card";
 import { HealthBar } from "@/components/health-bar";
 import { Panel, Tag } from "@/components/ui";
 import { formatCote } from "@/lib/fight-engine";

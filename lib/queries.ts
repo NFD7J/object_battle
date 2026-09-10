@@ -84,7 +84,7 @@ function toIsoDay(value: string | Date): string {
   return toIsoDate(value).slice(0, 10);
 }
 
-function toCombatant(row: ObjectRow): Combatant {
+function toObject(row: ObjectRow): Object {
   const stats: Stats = {
     puissance: row.power,
     resistance: row.resistance,
@@ -99,11 +99,7 @@ function toCombatant(row: ObjectRow): Combatant {
     description: row.description,
     image: row.image,
     stats,
-    // Score global affiché sur les cartes : moyenne des 4 caractéristiques.
-    // À ne pas confondre avec le score d'un combat, qui ajoute de l'aléatoire.
-    overall: Math.round(
-      (stats.puissance + stats.resistance + stats.rapidite + stats.intelligence) / 4,
-    ),
+    overall: (row.power*1.20) + (row.resistance*1.15) + (row.speed*1.05) + (row.intelligence*1.10),
     nbWins: row.nb_wins,
     nbLosses: row.nb_losses,
   };
@@ -136,8 +132,8 @@ function toFight(row: FightRow): Fight {
 
   return {
     id: row.id,
-    fighterA: toCombatant(row.fighter_a),
-    fighterB: toCombatant(row.fighter_b),
+    fighterA: toObject(row.fighter_a),
+    fighterB: toObject(row.fighter_b),
     winnerId: row.winner_id,
     pvA: row.score_1,
     pvB: row.score_2,
@@ -239,7 +235,7 @@ function limiteValide(valeur: number, defaut: number, max = 100): number {
    =========================================================================== */
 
 /** Tous les objets, du meilleur score global au moins bon. Page « Objets ». */
-export const getAllObjects = cache(async (): Promise<Combatant[]> => {
+export const getAllObjects = cache(async (): Promise<Object[]> => {
   const sql = getSql();
 
   const rows = (await sql`
@@ -248,35 +244,35 @@ export const getAllObjects = cache(async (): Promise<Combatant[]> => {
     ORDER BY (power + resistance + speed + intelligence) DESC, name ASC
   `) as ObjectRow[];
 
-  return rows.map(toCombatant);
+  return rows.map(toObject);
 });
 
 /** Un objet par son slug d'URL : /objets/marteau. Renvoie null si absent. */
 export const getObjectBySlug = cache(
-  async (slug: string): Promise<Combatant | null> => {
+  async (slug: string): Promise<Object | null> => {
     const sql = getSql();
 
     const rows = (await sql`
       SELECT * FROM objects WHERE slug = ${slug} LIMIT 1
     `) as ObjectRow[];
 
-    return rows[0] ? toCombatant(rows[0]) : null;
+    return rows[0] ? toObject(rows[0]) : null;
   },
 );
 
 /** Un objet par son identifiant. */
-export const getObjectById = cache(async (id: number): Promise<Combatant | null> => {
+export const getObjectById = cache(async (id: number): Promise<Object | null> => {
   const sql = getSql();
 
   const rows = (await sql`
     SELECT * FROM objects WHERE id = ${identifiantValide(id, "id")} LIMIT 1
   `) as ObjectRow[];
 
-  return rows[0] ? toCombatant(rows[0]) : null;
+  return rows[0] ? toObject(rows[0]) : null;
 });
 
 /** Deux objets distincts tirés au hasard, pour le bouton « Tirage au sort ». */
-export async function getRandomObjectPair(): Promise<[Combatant, Combatant] | null> {
+export async function getRandomObjectPair(): Promise<[Object, Object] | null> {
   const sql = getSql();
 
   const rows = (await sql`
@@ -285,7 +281,7 @@ export async function getRandomObjectPair(): Promise<[Combatant, Combatant] | nu
 
   if (rows.length < 2) return null;
 
-  return [toCombatant(rows[0]), toCombatant(rows[1])];
+  return [toObject(rows[0]), toObject(rows[1])];
 }
 
 /** Uniquement les slugs, pour generateStaticParams() des fiches objet. */
@@ -314,7 +310,7 @@ export type NewObjectInput = {
  * @throws {ValidationError} si un champ est absent ou hors bornes
  * @throws {ConflictError}   si un objet porte déjà ce nom
  */
-export async function createObject(input: NewObjectInput): Promise<Combatant> {
+export async function createObject(input: NewObjectInput): Promise<Object> {
   const sql = getSql();
 
   const name = texteObligatoire(input.name, "nom", 40);
@@ -347,7 +343,7 @@ export async function createObject(input: NewObjectInput): Promise<Combatant> {
     throw new ConflictError(`Un objet nommé « ${name} » existe déjà.`);
   }
 
-  return toCombatant(rows[0]);
+  return toObject(rows[0]);
 }
 
 /* ===========================================================================
