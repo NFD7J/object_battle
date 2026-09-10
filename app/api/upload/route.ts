@@ -1,19 +1,20 @@
-import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
-
 import { apiError, handleApiError } from "@/lib/api";
 import { getCurrentPlayerId } from "@/lib/auth";
+import {
+  cloudinaryEstConfigure,
+  envoyerImageCloudinary,
+} from "@/lib/cloudinary";
 
 /* ===========================================================================
    POST /api/upload?filename=marteau.png
 
-   Envoie l'image d'un objet sur Cloudinary (§7) et renvoie son URL, à placer
-   ensuite dans le champ « image » de POST /api/objets.
+   Envoie l'image d'un objet sur Cloudinary et renvoie son URL publique,
+   à placer ensuite dans le champ « image » de POST /api/objets.
 
-   Le fichier est streamé directement dans le corps de la requête, sans
-   FormData. Il transite par notre serveur plutôt que d'aller directement du
-   navigateur vers Cloudinary : c'est ce qui permet de contrôler le type réel,
-   la taille et le nom du fichier avant stockage (§16), et de garder la clé
-   secrète Cloudinary hors du navigateur.
+   Même principe que app/avatar/uploads : le fichier est streamé directement
+   dans le corps de la requête, sans passer par un FormData. On y ajoute les
+   contrôles attendus au §16, car un envoi de fichier est la porte d'entrée la
+   plus exposée d'un site : type réel, taille, et nom de fichier reconstruit.
    =========================================================================== */
 
 /** Seuls ces formats sont acceptés ; l'extension est déduite du type, pas du nom. */
@@ -25,19 +26,16 @@ const TYPES_AUTORISES: Record<string, string> = {
 
 const TAILLE_MAX_OCTETS = 4 * 1024 * 1024; // 4 Mo
 
-/** Dossier Cloudinary où atterrissent les images d'objets. */
-const DOSSIER = "object-battle/objets";
-
 /**
- * Reconstruit un nom de fichier sûr à partir de celui envoyé par le navigateur.
+ * Reconstruit un identifiant sûr à partir du nom envoyé par le navigateur.
  *
  * On ne réutilise jamais la chaîne telle quelle : elle pourrait contenir des
- * « ../ » ou des séparateurs de chemin et faire écrire le fichier ailleurs que
- * dans le dossier prévu.
+ * « ../ » ou des séparateurs de chemin. L'extension est ignorée : Cloudinary
+ * la déduit du contenu.
  */
-function nomDeFichierSur(nomBrut: string): string {
+function identifiantSur(nomBrut: string): string {
   const base = nomBrut
-    .replace(/\.[^.]+$/, "") // retire l'extension d'origine
+    .replace(/\.[^.]+$/, "")
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
@@ -46,52 +44,6 @@ function nomDeFichierSur(nomBrut: string): string {
     .slice(0, 60);
 
   return base || "objet";
-}
-
-/**
- * Cloudinary lit sa configuration dans CLOUDINARY_URL, de la forme
- * cloudinary://<api_key>:<api_secret>@<cloud_name>.
- * On configure explicitement pour pouvoir donner une erreur claire si absent.
- */
-function configurer(): boolean {
-  const url = process.env.CLOUDINARY_URL;
-
-  if (!url) return false;
-
-  cloudinary.config({ secure: true });
-
-  return Boolean(cloudinary.config().cloud_name);
-}
-
-/** Enveloppe upload_stream, qui fonctionne par callback, dans une promesse. */
-function envoyerACloudinary(
-  fichier: Buffer,
-  publicId: string,
-): Promise<UploadApiResponse> {
-  return new Promise((resolve, rejeter) => {
-    const flux = cloudinary.uploader.upload_stream(
-      {
-        folder: DOSSIER,
-        public_id: publicId,
-        resource_type: "image",
-        // Cloudinary ajoute un suffixe aléatoire : deux objets nommés
-        // « marteau.png » ne s'écrasent pas l'un l'autre.
-        unique_filename: true,
-        overwrite: false,
-        // Deuxième garde-fou, après notre propre contrôle du content-type.
-        allowed_formats: ["png", "jpg", "jpeg", "webp"],
-      },
-      (erreur, resultat) => {
-        if (erreur || !resultat) {
-          rejeter(erreur ?? new Error("Cloudinary n'a rien renvoyé."));
-          return;
-        }
-        resolve(resultat);
-      },
-    );
-
-    flux.end(fichier);
-  });
 }
 
 export async function POST(request: Request): Promise<Response> {
@@ -113,8 +65,9 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const contentType = request.headers.get("content-type")?.split(";")[0].trim() ?? "";
+    const extension = TYPES_AUTORISES[contentType];
 
-    if (!TYPES_AUTORISES[contentType]) {
+    if (!extension) {
       return apiError(
         415,
         "TYPE_REFUSE",
@@ -122,46 +75,71 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
+    // Content-Length est absent en envoi par morceaux : on ne contrôle que
+    // lorsqu'il est fourni, puis on revérifie après lecture du corps.
+    const tailleAnnoncee = Number(request.headers.get("content-length") ?? 0);
+
+    if (tailleAnnoncee > TAILLE_MAX_OCTETS) {
+      return apiError(
+        413,
+        "FICHIER_TROP_LOURD",
+        `Image trop lourde (${Math.round(tailleAnnoncee / 1024 / 1024)} Mo). Maximum : 4 Mo.`,
+      );
+    }
+
     if (!request.body) {
       return apiError(400, "VALIDATION", "Aucun fichier reçu.");
     }
 
-    // La requête est valide : reste à vérifier que le serveur est configuré.
-    // Ce contrôle vient après, pour qu'un client fautif reçoive bien une
-    // erreur 4xx qui le concerne, et non une 500 qui parle du serveur.
-    if (!configurer()) {
-      return apiError(
-        500,
-        "CONFIG_MANQUANTE",
-        "CLOUDINARY_URL n'est pas défini : impossible d'envoyer l'image.",
-      );
-    }
-
-    // On lit le fichier en mémoire : acceptable car plafonné à 4 Mo. La taille
-    // réelle est vérifiée ici, et pas seulement via l'en-tête Content-Length
-    // qui peut mentir ou manquer en envoi par morceaux.
     const fichier = Buffer.from(await request.arrayBuffer());
 
     if (fichier.byteLength === 0) {
-      return apiError(400, "VALIDATION", "Le fichier reçu est vide.");
+      return apiError(400, "VALIDATION", "Aucun fichier reçu.");
     }
 
     if (fichier.byteLength > TAILLE_MAX_OCTETS) {
       return apiError(
         413,
         "FICHIER_TROP_LOURD",
-        `Image trop lourde (${(fichier.byteLength / 1024 / 1024).toFixed(1)} Mo). Maximum : 4 Mo.`,
+        `Image trop lourde (${Math.round(fichier.byteLength / 1024 / 1024)} Mo). Maximum : 4 Mo.`,
       );
     }
 
-    const resultat = await envoyerACloudinary(fichier, nomDeFichierSur(filename));
+    // La requête est valide : reste à vérifier que le serveur est configuré.
+    // Ce contrôle vient après, pour qu'un client fautif reçoive bien une
+    // erreur 4xx qui le concerne, et non une 500 qui parle du serveur.
+    if (!cloudinaryEstConfigure()) {
+      return apiError(
+        500,
+        "CONFIG_MANQUANTE",
+        "Cloudinary n'est pas configuré : CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY et CLOUDINARY_API_SECRET sont requis.",
+      );
+    }
+
+    const resultat = await envoyerImageCloudinary(fichier, {
+      folder: "object-battle/objets",
+      filename_override: identifiantSur(filename),
+      resource_type: "image",
+      overwrite: false,
+      unique_filename: true,
+      use_filename: true,
+    });
 
     return Response.json({
       url: resultat.secure_url,
       pathname: resultat.public_id,
-      contentType: `image/${resultat.format}`,
+      contentType,
     });
   } catch (error) {
+    const message =
+      error && typeof error === "object" && "message" in error
+        ? String((error as { message: unknown }).message)
+        : null;
+
+    if (error && typeof error === "object" && "http_code" in error && message) {
+      return apiError(502, "CLOUDINARY", `L'envoi vers Cloudinary a échoué : ${message}`);
+    }
+
     return handleApiError(error);
   }
 }
