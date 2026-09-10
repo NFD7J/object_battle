@@ -38,6 +38,14 @@ export function TopPlayersPreview({ limit = 4 }: { limit?: number }) {
   const joueurs = useJoueurs();
   const topJoueurs = [...joueurs].sort((a, b) => b.points - a.points).slice(0, limit);
 
+  if (topJoueurs.length === 0) {
+    return (
+      <p className="relative mt-5 text-sm text-white/55">
+        Aucun joueur classé pour le moment. Créez un compte pour apparaître ici.
+      </p>
+    );
+  }
+
   return (
     <ol className="relative mt-5 grid gap-2.5">
       {topJoueurs.map((player, index) => (

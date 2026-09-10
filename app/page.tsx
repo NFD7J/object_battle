@@ -4,6 +4,7 @@ import { HeroStats, TopPlayersPanel } from "@/components/game-live";
 import { getAllObjects } from "@/lib/queries";
 import { HistoryList } from "@/components/history-list";
 import { Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
+import { getCurrentPlayer } from "@/lib/auth";
 
 const ETAPES = [
   {
@@ -27,6 +28,7 @@ const ETAPES = [
 ];
 
 export default async function AccueilPage() {
+  const joueur = await getCurrentPlayer();
   const objets = await getAllObjects();
 
   return (
@@ -130,9 +132,15 @@ export default async function AccueilPage() {
             <Link href="/combattre" className={`${btn.base} ${btn.secondary}`}>
               <span className={btnLabel}>Commencer un combat</span>
             </Link>
-            <Link href="/objets/nouveau" className={`${btn.base} ${btn.ghost}`}>
-              <span className={btnLabel}>Ajouter un objet</span>
-            </Link>
+            {joueur ? (
+              <Link href="/objets/nouveau" className={`${btn.base} ${btn.ghost}`}>
+                <span className={btnLabel}>Ajouter un objet</span>
+              </Link>
+            ) : (
+              <Link href="/inscription" className={`${btn.base} ${btn.ghost}`}>
+                <span className={btnLabel}>Créer un compte</span>
+              </Link>
+            )}
           </div>
         </div>
       </section>

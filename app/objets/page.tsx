@@ -21,13 +21,19 @@ export default async function ObjetsPage() {
       <PageHeader
         eyebrow="Roster"
         title="Les objets"
-        subtitle={`${combatants.length} combattants sont prêts à en découdre. Consultez leurs statistiques, ouvrez leur fiche, ou ajoutez le vôtre.`}
+        subtitle={
+          joueur
+            ? `${combatants.length} combattants sont prêts à en découdre. Consultez leurs statistiques, ouvrez leur fiche, ou ajoutez le vôtre.`
+            : `${combatants.length} combattants sont prêts à en découdre. Consultez leurs statistiques ou ouvrez leur fiche.`
+        }
         action={
-          <Link href="/objets/nouveau" className={`${btn.base} ${btn.secondary}`}>
-            <span className={btnLabel}>
-              <span aria-hidden="true">+</span> Ajouter un objet
-            </span>
-          </Link>
+          joueur ? (
+            <Link href="/objets/nouveau" className={`${btn.base} ${btn.secondary}`}>
+              <span className={btnLabel}>
+                <span aria-hidden="true">+</span> Ajouter un objet
+              </span>
+            </Link>
+          ) : undefined
         }
       />
 
@@ -48,13 +54,36 @@ export default async function ObjetsPage() {
             Ajoutez son nom, son image et ses quatre caractéristiques : il
             rejoindra l&apos;arène et pourra être sélectionné en combat.
           </p>
-          <Link
-            href="/objets/nouveau"
-            className={`${btn.base} ${btn.primary} mt-6`}
-          >
-            <span className={btnLabel}>Créer un objet</span>
-          </Link>
-        </div>
+        )}
+
+        {joueur ? (
+          <div className="mt-10 border border-dashed border-edge bg-panel/50 px-6 py-10 text-center">
+            <h2 className="text-2xl text-white">Un objet vous manque ?</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-white/60">
+              Ajoutez son nom, son image et ses quatre caractéristiques : il
+              rejoindra l&apos;arène et pourra être sélectionné en combat.
+            </p>
+            <Link
+              href="/objets/nouveau"
+              className={`${btn.base} ${btn.primary} mt-6`}
+            >
+              <span className={btnLabel}>Créer un objet</span>
+            </Link>
+          </div>
+        ) : (
+          <div className="mt-10 border border-dashed border-edge bg-panel/50 px-6 py-10 text-center">
+            <h2 className="text-2xl text-white">Envie d&apos;ajouter un objet ?</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-white/60">
+              Créez un compte pour déposer vos propres combattants dans l&apos;arène.
+            </p>
+            <Link
+              href="/inscription"
+              className={`${btn.base} ${btn.primary} mt-6`}
+            >
+              <span className={btnLabel}>Créer un compte</span>
+            </Link>
+          </div>
+        )}
       </div>
     </>
   );

@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { ObjectForm } from "@/app/objets/nouveau/object-form";
 import { PageHeader } from "@/components/ui";
+import { getCurrentPlayer } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: "Créer un objet",
@@ -9,7 +12,13 @@ export const metadata: Metadata = {
     "Ajoutez un objet à Object Battle : nom, description, image et quatre caractéristiques de combat notées de 0 à 100.",
 };
 
-export default function NouvelObjetPage() {
+export default async function NouvelObjetPage() {
+  const joueur = await getCurrentPlayer();
+
+  if (!joueur) {
+    redirect("/connexion");
+  }
+
   return (
     <>
       <PageHeader

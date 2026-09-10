@@ -1,6 +1,7 @@
 import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
 
 import { apiError, handleApiError } from "@/lib/api";
+import { getCurrentPlayerId } from "@/lib/auth";
 
 /* ===========================================================================
    POST /api/upload?filename=marteau.png
@@ -95,6 +96,16 @@ function envoyerACloudinary(
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const playerId = await getCurrentPlayerId();
+
+    if (playerId === null) {
+      return apiError(
+        401,
+        "NON_AUTHENTIFIE",
+        "Connectez-vous pour envoyer une image.",
+      );
+    }
+
     const filename = new URL(request.url).searchParams.get("filename");
 
     if (!filename) {

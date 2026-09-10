@@ -4,7 +4,7 @@ import Link from "next/link";
 
 import { PlayerAvatar, RankingTable } from "@/components/ranking-table";
 import { PageHeader, Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
-import { useJoueur, useJoueurs } from "@/lib/game-store";
+import { useJoueur, useJoueurs, useGame } from "@/lib/game-store";
 
 /** Ordre d'affichage du podium : 2e à gauche, 1er au centre, 3e à droite. */
 const ORDRE_PODIUM = [1, 0, 2];
@@ -12,6 +12,7 @@ const ORDRE_PODIUM = [1, 0, 2];
 const HAUTEURS = ["h-28", "h-40", "h-20"];
 
 export function ClassementView() {
+  const { connecte } = useGame();
   const joueur = useJoueur();
   const joueurs = useJoueurs();
   const parPoints = [...joueurs].sort((a, b) => b.points - a.points);
@@ -39,31 +40,37 @@ export function ClassementView() {
           </h2>
 
           <ol className="flex items-end justify-center gap-3 sm:gap-6">
-            {podium.map(({ player, rang }, position) => (
-              <li key={player.id} className="flex-1 text-center sm:max-w-48">
-                <PlayerAvatar player={player} size={rang === 1 ? 72 : 56} />
-                <p className="mt-3 truncate font-display text-xl text-white sm:text-2xl">
-                  {player.username}
-                </p>
-                <p className="font-mono text-sm font-bold text-arcade-gold tabular-nums">
-                  {player.points.toLocaleString("fr-FR")} pts
-                </p>
+            {podium.length > 0 ? (
+              podium.map(({ player, rang }, position) => (
+                <li key={player.id} className="flex-1 text-center sm:max-w-48">
+                  <PlayerAvatar player={player} size={rang === 1 ? 72 : 56} />
+                  <p className="mt-3 truncate font-display text-xl text-white sm:text-2xl">
+                    {player.username}
+                  </p>
+                  <p className="font-mono text-sm font-bold text-arcade-gold tabular-nums">
+                    {player.points.toLocaleString("fr-FR")} pts
+                  </p>
 
-                <div
-                  className={`mt-3 grid ${HAUTEURS[position]} cut-corner-sm place-items-center border-t-2 ${
-                    rang === 1
-                      ? "border-arcade-gold bg-linear-to-b from-arcade-gold/30 to-transparent"
-                      : rang === 2
-                        ? "border-white/60 bg-linear-to-b from-white/15 to-transparent"
-                        : "border-arcade-orange bg-linear-to-b from-arcade-orange/25 to-transparent"
-                  }`}
-                >
-                  <span className="font-display text-4xl text-white sm:text-5xl">
-                    {rang}
-                  </span>
-                </div>
+                  <div
+                    className={`mt-3 grid ${HAUTEURS[position]} cut-corner-sm place-items-center border-t-2 ${
+                      rang === 1
+                        ? "border-arcade-gold bg-linear-to-b from-arcade-gold/30 to-transparent"
+                        : rang === 2
+                          ? "border-white/60 bg-linear-to-b from-white/15 to-transparent"
+                          : "border-arcade-orange bg-linear-to-b from-arcade-orange/25 to-transparent"
+                    }`}
+                  >
+                    <span className="font-display text-4xl text-white sm:text-5xl">
+                      {rang}
+                    </span>
+                  </div>
+                </li>
+              ))
+            ) : (
+              <li className="w-full py-8 text-center font-display text-2xl text-white/50">
+                Aucun joueur au classement pour le moment
               </li>
-            ))}
+            )}
           </ol>
         </div>
       </section>

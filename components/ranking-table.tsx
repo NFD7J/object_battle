@@ -71,6 +71,17 @@ export function RankingTable({
   const [sort, setSort] = useState<RankingSort>("points");
   const sorted = sortPlayers(players, sort);
 
+  if (players.length === 0) {
+    return (
+      <Panel innerClassName="p-10 text-center">
+        <p className="font-display text-2xl text-white/60">Aucun joueur classé</p>
+        <p className="mt-2 text-sm text-white/50">
+          Les comptes créés apparaîtront ici avec leurs points et leurs victoires.
+        </p>
+      </Panel>
+    );
+  }
+
   return (
     <div>
       {/* Choix du critère de tri (§4.4) */}

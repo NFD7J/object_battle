@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/site-header";
 import { getCurrentPlayer } from "@/lib/auth";
 import { getRanking, getRecentFights } from "@/lib/queries";
 import { GameProvider } from "@/lib/game-store";
+import { chargerClassement, chargerDonneesCompte } from "@/lib/vue-data";
 
 import "./globals.css";
 
@@ -76,11 +77,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           >
             Aller au contenu principal
           </a>
-          <SiteHeader player={joueur}/>
+          <SiteHeader player={joueur} />
           <main id="contenu" className="flex-1">
             {children}
           </main>
-          <SiteFooter />
+          <SiteFooter connecte={Boolean(joueur)} />
         </GameProvider>
       </body>
     </html>

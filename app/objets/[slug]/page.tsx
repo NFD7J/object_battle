@@ -6,6 +6,8 @@ import { CombatantPortrait, OverallBadge } from "@/components/combatant-card";
 import { HistoryList } from "@/components/history-list";
 import { StatList } from "@/components/stat-bar";
 import { Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
+import { getCurrentPlayer } from "@/lib/auth";
+import type { Object, Fight } from "@/lib/types";
 import { getObjectBySlug, getObjectSlugs } from "@/lib/queries";
 import { STAT_HINTS, STAT_KEYS, STAT_LABELS } from "@/lib/types";
 
@@ -185,6 +187,7 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
             compact
             combatantId={combatant.id}
             filtres={false}
+            fights={combats}
             emptyTitle="Aucun combat ici"
             emptyText="Cet objet n'est encore jamais monté sur le ring."
           />

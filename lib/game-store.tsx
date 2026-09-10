@@ -4,14 +4,16 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
 
 import { deltaParis } from "@/lib/fight-engine";
 import type { Issue, ResultatCombat } from "@/lib/fight-engine";
-import type { Combatant, Fight, Player } from "@/lib/types";
+import type { Object, Fight, Player } from "@/lib/types";
 
 const CLE_STOCKAGE = "object-battle-partie";
 const VERSION = 1;
@@ -25,8 +27,8 @@ type EtatPartie = {
 };
 
 export type CombatAEnregistrer = {
-  fighterA: Combatant;
-  fighterB: Combatant;
+  fighterA: Object;
+  fighterB: Object;
   resultat: ResultatCombat;
   bet: Issue;
   mise: number;
@@ -34,6 +36,8 @@ export type CombatAEnregistrer = {
 };
 
 type GameContextValue = EtatPartie & {
+  connecte: boolean;
+  combatants: Object[];
   enregistrerCombat: (entree: CombatAEnregistrer) => void;
   /** Joueur connecté tel que la base le connaît, ou null si personne ne l'est. */
   joueur: Player | null;
@@ -154,7 +158,7 @@ function getServerSnapshot() {
   return etatCourant;
 }
 
-function setEtat(updater: (precedent: EtatPartie) => EtatPartie) {
+function setEtatDemo(updater: (precedent: EtatPartie) => EtatPartie) {
   etatCourant = updater(etatCourant);
   ecrireStockage(etatCourant);
   emit();
@@ -178,7 +182,7 @@ export function GameProvider({
   const etat = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const enregistrerCombat = useCallback((entree: CombatAEnregistrer) => {
-    setEtat((precedent) => {
+    setEtatDemo((precedent) => {
       const pariGagnant = entree.bet === entree.resultat.vainqueur;
       const delta = deltaParis(entree.mise, entree.cote, pariGagnant);
       const points = Math.max(0, precedent.points + delta);
@@ -202,6 +206,89 @@ export function GameProvider({
   return <GameContext.Provider value={valeur}>{children}</GameContext.Provider>;
 }
 
+function CompteProvider({
+  children,
+  joueurInitial,
+  initiales,
+}: {
+  children: ReactNode;
+  joueurInitial: Player;
+  initiales: DonneesCompte;
+}) {
+  const [joueur, setJoueur] = useState(joueurInitial);
+  const [fights, setFights] = useState(initiales.combats);
+  const [combatants, setCombatants] = useState(initiales.objets);
+  const [joueurs, setJoueurs] = useState(initiales.joueurs);
+
+  useEffect(() => {
+    setJoueur(joueurInitial);
+    setFights(initiales.combats);
+    setCombatants(initiales.objets);
+    setJoueurs(initiales.joueurs);
+  }, [joueurInitial, initiales]);
+
+  const enregistrerCombat = useCallback((_entree: CombatAEnregistrer) => {
+    // Les comptes passent par POST /api/combats, pas par le moteur local.
+  }, []);
+
+  const appliquerCombatServeur = useCallback(
+    (combat: Fight, joueurMaj: Player, objets?: Combatant[], classement?: Player[]) => {
+      setJoueur(joueurMaj);
+      setFights((precedent) => [combat, ...precedent.filter((fight) => fight.id !== combat.id)]);
+      if (objets) setCombatants(objets);
+      if (classement) {
+        setJoueurs(classement.map((player) => (player.id === joueurMaj.id ? joueurMaj : player)));
+      } else {
+        setJoueurs((precedent) =>
+          precedent.map((player) => (player.id === joueurMaj.id ? joueurMaj : player)),
+        );
+      }
+    },
+    [],
+  );
+
+  const valeur = useMemo<GameContextValue>(
+    () => ({
+      points: joueur.points,
+      maxPoints: joueur.maxPoints,
+      nbVictoires: joueur.nbVictoires,
+      nbCombats: joueur.nbCombats,
+      fights,
+      connecte: true,
+      combatants,
+      joueurs,
+      joueur,
+      enregistrerCombat,
+      appliquerCombatServeur,
+    }),
+    [joueur, fights, combatants, joueurs, enregistrerCombat, appliquerCombatServeur],
+  );
+
+  return <GameContext.Provider value={valeur}>{children}</GameContext.Provider>;
+}
+
+export function GameProvider({
+  children,
+  joueur,
+  initiales,
+  classement,
+}: {
+  children: ReactNode;
+  joueur: Player | null;
+  initiales: DonneesCompte | null;
+  classement: Player[];
+}) {
+  if (joueur && initiales) {
+    return (
+      <CompteProvider joueurInitial={joueur} initiales={initiales}>
+        {children}
+      </CompteProvider>
+    );
+  }
+
+  return <DemoProvider classement={classement}>{children}</DemoProvider>;
+}
+
 export function useGame(): GameContextValue {
   const contexte = useContext(GameContext);
   if (!contexte) {
@@ -222,7 +309,7 @@ export function useJoueur(): Player | null {
   );
 }
 
-/** Tous les joueurs, le joueur courant ayant son score live. */
+/** Classement réel, que le joueur soit connecté ou non. */
 export function useJoueurs(): Player[] {
   const { joueurs } = useGame();
   const joueur = useJoueur();
