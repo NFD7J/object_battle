@@ -36,7 +36,10 @@ export function HeroStats({ nbObjets }: { nbObjets: number }) {
 /** Aperçu du classement, recalculé après chaque pari. */
 export function TopPlayersPreview({ limit = 4 }: { limit?: number }) {
   const joueurs = useJoueurs();
-  const topJoueurs = [...joueurs].sort((a, b) => b.points - a.points).slice(0, limit);
+  // Meme ordre que la page Classement : c'est un extrait du meme tableau.
+  const topJoueurs = [...joueurs]
+    .sort((a, b) => b.maxPoints - a.maxPoints)
+    .slice(0, limit);
 
   if (topJoueurs.length === 0) {
     return (
@@ -70,10 +73,10 @@ export function TopPlayersPreview({ limit = 4 }: { limit?: number }) {
           </span>
           <span className="text-right">
             <span className="block font-mono text-base font-bold text-arcade-gold tabular-nums">
-              {player.points.toLocaleString("fr-FR")}
+              {player.maxPoints.toLocaleString("fr-FR")}
             </span>
             <span className="block font-mono text-[9px] tracking-widest text-white/40 uppercase">
-              points
+              record
             </span>
           </span>
         </li>

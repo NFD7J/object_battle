@@ -17,8 +17,11 @@ export function ProfilView({ objets }: { objets: Object[] }) {
   // couvre le court instant avant que le store ait reçu le joueur.
   if (!joueur) return null;
 
+  // Meme critere que la page Classement : le meilleur solde jamais atteint.
+  // Trier ici sur les points courants afficherait un rang different de celui
+  // du tableau, pour le meme joueur.
   const rang =
-    [...joueurs].sort((a, b) => b.points - a.points).findIndex(
+    [...joueurs].sort((a, b) => b.maxPoints - a.maxPoints).findIndex(
       (player) => player.id === joueur.id,
     ) + 1;
 

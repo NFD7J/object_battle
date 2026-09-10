@@ -699,17 +699,17 @@ export async function createFight(input: NewFightInput): Promise<Fight> {
  * navigateur n'atteint la requête.
  */
 const ORDRES_CLASSEMENT: Record<RankingSort, string> = {
-  points: "points DESC, nb_victoires DESC",
-  victoires: "nb_victoires DESC, points DESC",
+  max_points: "max_points DESC, nb_victoires DESC",
+  victoires: "nb_victoires DESC, max_points DESC",
   ratio:
-    "(CASE WHEN nb_combats = 0 THEN 0 ELSE nb_victoires::numeric / nb_combats END) DESC, points DESC",
+    "(CASE WHEN nb_combats = 0 THEN 0 ELSE nb_victoires::numeric / nb_combats END) DESC, max_points DESC",
 };
 
 /** Le classement des joueurs, trié selon le critère demandé. */
 export const getRanking = cache(
-  async (sort: RankingSort = "points", limit = 50): Promise<Player[]> => {
+  async (sort: RankingSort = "max_points", limit = 50): Promise<Player[]> => {
     const sql = getSql();
-    const ordre = ORDRES_CLASSEMENT[sort] ?? ORDRES_CLASSEMENT.points;
+    const ordre = ORDRES_CLASSEMENT[sort] ?? ORDRES_CLASSEMENT.max_points;
 
     const rows = (await sql`
       SELECT ${sql.unsafe(COLONNES_JOUEUR)}
@@ -746,14 +746,21 @@ export const getPlayerById = cache(lirePlayerById);
  */
 export const getPlayerByIdFresh = lirePlayerById;
 
-/** La place d'un joueur au classement par points, 1 étant le premier. */
+/**
+ * La place d'un joueur au classement, 1 étant le premier.
+ *
+ * Le critère est max_points, comme ORDRES_CLASSEMENT.max_points : c'est le
+ * meilleur solde jamais atteint, pas le solde courant. Une place acquise ne se
+ * reperd donc pas en misant — et les deux calculs doivent rester d'accord,
+ * sinon un joueur verrait un rang différent de sa ligne dans le tableau.
+ */
 export const getPlayerRank = cache(async (id: number): Promise<number | null> => {
   const sql = getSql();
 
   const rows = (await sql`
     SELECT COUNT(*) + 1 AS rang
     FROM users
-    WHERE points > (SELECT points FROM users WHERE id = ${identifiantValide(id, "id")})
+    WHERE max_points > (SELECT max_points FROM users WHERE id = ${identifiantValide(id, "id")})
   `) as { rang: number | string }[];
 
   return rows[0] ? Number(rows[0].rang) : null;

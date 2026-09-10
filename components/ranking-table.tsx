@@ -6,7 +6,7 @@ import { Panel } from "@/components/ui";
 import type { Player, RankingSort } from "@/lib/types";
 
 const SORTS: { key: RankingSort; label: string }[] = [
-  { key: "points", label: "Score" },
+  { key: "max_points", label: "Record" },
   { key: "victoires", label: "Victoires" },
   { key: "ratio", label: "Taux de victoire" },
 ];
@@ -21,7 +21,7 @@ function sortPlayers(players: Player[], sort: RankingSort): Player[] {
   const copy = [...players];
   if (sort === "victoires") return copy.sort((a, b) => b.nbVictoires - a.nbVictoires);
   if (sort === "ratio") return copy.sort((a, b) => winRate(b) - winRate(a));
-  return copy.sort((a, b) => b.points - a.points);
+  return copy.sort((a, b) => b.maxPoints - a.maxPoints);
 }
 
 /** Pastille de rang : or, argent, bronze, puis numéro simple. */
@@ -68,7 +68,7 @@ export function RankingTable({
   players: Player[];
   currentPlayerId?: number;
 }) {
-  const [sort, setSort] = useState<RankingSort>("points");
+  const [sort, setSort] = useState<RankingSort>("max_points");
   const sorted = sortPlayers(players, sort);
 
   if (players.length === 0) {
@@ -76,7 +76,7 @@ export function RankingTable({
       <Panel innerClassName="p-10 text-center">
         <p className="font-display text-2xl text-white/60">Aucun joueur classé</p>
         <p className="mt-2 text-sm text-white/50">
-          Les comptes créés apparaîtront ici avec leurs points et leurs victoires.
+          Les comptes créés apparaîtront ici avec leur record et leurs victoires.
         </p>
       </Panel>
     );
@@ -129,7 +129,7 @@ export function RankingTable({
                 Joueur
               </th>
               <th scope="col" className="p-3 text-right font-mono text-[11px] tracking-[0.14em] text-white/50 uppercase">
-                Score
+                Record
               </th>
               <th scope="col" className="p-3 text-right font-mono text-[11px] tracking-[0.14em] text-white/50 uppercase">
                 Victoires
@@ -166,7 +166,7 @@ export function RankingTable({
                     </span>
                   </th>
                   <td className="p-3 text-right font-mono font-bold text-arcade-gold tabular-nums">
-                    {player.points.toLocaleString("fr-FR")}
+                    {player.maxPoints.toLocaleString("fr-FR")}
                   </td>
                   <td className="p-3 text-right font-mono text-white/80 tabular-nums">
                     {player.nbVictoires}

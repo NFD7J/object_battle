@@ -55,11 +55,12 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
   const [fighterB, setFighterB] = useState<Object | null>(null);
   const [activeSlot, setActiveSlot] = useState<Slot>("B");
   const [bet, setBet] = useState<BetChoice | null>(null);
-  const [mise, setMise] = useState<number>(25);
+  const [mise, setMise] = useState<string>("25");
   const [recherche, setRecherche] = useState("");
   const [phase, setPhase] = useState<Phase>("selection");
   const [resultat, setResultat] = useState<ResultatCombat | null>(null);
-  const [soldeAvant, setSoldeAvant] = useState<number | null>(null);
+  /** Pari tel qu'il a été engagé, figé au lancement du combat. */
+  const [pariJoue, setPariJoue] = useState<PariEngage | null>(null);
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -108,16 +109,36 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
     return () => controleur.abort();
   }, [idA, idB]);
 
-  const miseAbordable =
-    mise <= points ? mise : ([...MISES].reverse().find((montant) => montant <= points) ?? mise);
+  /*
+   * La mise est saisie librement, donc gardée en texte : un champ vide ou en
+   * cours de frappe n'est pas un nombre. Le `onChange` n'y laisse entrer que
+   * des chiffres, ce qui réduit les saisies invalides à deux cas — zéro, et
+   * plus de points qu'on n'en a.
+   *
+   * On ne corrige jamais ce que le joueur a tapé : une mise hors bornes reste
+   * affichée telle quelle, avec son message d'erreur, et le combat ne part
+   * pas. Remplacer sa saisie par un montant abordable engagerait des points
+   * qu'il n'a pas voulu miser.
+   */
+  const miseSaisie = mise === "" ? null : Number(mise);
+
+  const miseValide =
+    miseSaisie !== null && miseSaisie > 0 && miseSaisie <= points ? miseSaisie : null;
+
+  const erreurMise =
+    miseSaisie === null || miseValide !== null
+      ? null
+      : miseSaisie > points
+        ? `Mise trop élevée : il vous reste ${points.toLocaleString("fr-FR")} points.`
+        : "La mise doit être d'au moins 1 point.";
 
   // Un visiteur n'a que deux combattants à choisir ; un joueur doit en plus
-  // avoir posé un pari qu'il peut couvrir.
+  // avoir posé un pari et une mise qu'il peut couvrir.
   const pretAuCombat =
     fighterA !== null &&
     fighterB !== null &&
     !enCours &&
-    (!connecte || (bet !== null && miseAbordable <= points));
+    (!connecte || (bet !== null && miseValide !== null));
 
   const etapes = connecte ? ETAPES_JOUEUR : ETAPES_VISITEUR;
   const etapeCourante = !fighterA ? 0 : !fighterB ? 1 : connecte && !bet ? 2 : etapes.length - 1;
@@ -127,7 +148,16 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
 
     setErreur(null);
     setEnCours(true);
-    setSoldeAvant(points);
+
+    // Le pari est figé ici, avant que le combat ne modifie le solde. Le relire
+    // après coup donnerait une mise incohérente : miseValide se compare aux
+    // points restants, qui viennent justement de changer.
+    const pari =
+      connecte && bet !== null && cotes !== null && miseValide !== null
+        ? { bet, mise: miseValide, cote: cotes[bet], soldeAvant: points }
+        : null;
+
+    setPariJoue(pari);
 
     try {
       const reponse = await fetch("/api/combats", {
@@ -138,10 +168,10 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
           object2Id: fighterB.id,
           // Un visiteur n'envoie aucune mise : le serveur enregistre quand
           // même le combat, qui rejoint l'historique commun.
-          ...(connecte && bet
+          ...(pari
             ? {
                 betOn: bet === "nul" ? "nul" : bet === "A" ? fighterA.id : fighterB.id,
-                amount: miseAbordable,
+                amount: pari.mise,
               }
             : {}),
         }),
@@ -189,7 +219,7 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
   function reinitialiser() {
     setPhase("selection");
     setResultat(null);
-    setSoldeAvant(null);
+    setPariJoue(null);
     setBet(null);
     setFighterB(null);
     setActiveSlot("B");
@@ -483,6 +513,7 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
                   <legend className="font-mono text-xs tracking-[0.16em] text-arcade-cyan uppercase">
                     Montant de la mise
                   </legend>
+                  {/* Raccourcis : ils ne font que remplir le champ ci-dessous. */}
                   <div className="mt-4 flex flex-wrap gap-2">
                     {MISES.map((montant) => {
                       const tropCher = montant > points;
@@ -491,10 +522,10 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
                           key={montant}
                           type="button"
                           disabled={tropCher}
-                          onClick={() => setMise(montant)}
-                          aria-pressed={miseAbordable === montant}
+                          onClick={() => setMise(String(montant))}
+                          aria-pressed={miseValide === montant}
                           className={`tag-slant px-5 py-2.5 font-mono text-sm font-bold tabular-nums disabled:cursor-not-allowed disabled:opacity-35 ${
-                            miseAbordable === montant && !tropCher
+                            miseValide === montant && !tropCher
                               ? "bg-arcade-gold text-void"
                               : "bg-panel-soft text-white/70 hover:text-white"
                           }`}
@@ -504,26 +535,53 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
                       );
                     })}
                   </div>
-  
-                  {/* Récapitulatif mise × cote, mis à jour à chaque changement */}
-                  <p
-                    aria-live="polite"
-                    className="mt-5 flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-xs text-white/50"
-                  >
-                    {bet && cotes ? (
-                      <>
-                        <span>
-                          {miseAbordable} pts × {formatCote(cotes[bet])} =
-                        </span>
-                        <strong className="font-display text-2xl leading-none text-victory tabular-nums">
-                          +{gainPotentiel(miseAbordable, cotes[bet])} pts
-                        </strong>
-                        <span>en cas de bon pronostic.</span>
-                      </>
-                    ) : (
-                      <span>Choisissez une issue pour voir le gain potentiel.</span>
-                    )}
-                  </p>
+
+                  <div className="mt-4">
+                    <label
+                      htmlFor="mise-personnalisee"
+                      className="mb-2 block font-mono text-xs tracking-[0.14em] text-white/50 uppercase"
+                    >
+                      Mise personnalisée
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        id="mise-personnalisee"
+                        name="mise"
+                        type="text"
+                        // Pavé numérique sur mobile, sans les ergonomies pénibles de
+                        // type="number" (molette, flèches, virgule acceptée).
+                        inputMode="numeric"
+                        autoComplete="off"
+                        maxLength={9}
+                        value={mise}
+                        // Seuls les chiffres entrent : impossible de composer
+                        // « 12.5 » ou « -30 », que le serveur refuserait de toute
+                        // façon.
+                        onChange={(event) =>
+                          setMise(event.target.value.replace(/[^0-9]/g, ""))
+                        }
+                        placeholder="Ex. 250"
+                        aria-describedby="aide-mise"
+                        aria-invalid={erreurMise !== null}
+                        className={`w-40 border bg-panel-soft px-4 py-3 font-mono text-lg text-white tabular-nums placeholder:text-white/25 focus:outline-none ${
+                          erreurMise
+                            ? "border-defeat"
+                            : "border-edge focus:border-arcade-violet"
+                        }`}
+                      />
+                      <span className="font-mono text-sm text-white/50">points</span>
+                    </div>
+                    <p
+                      id="aide-mise"
+                      aria-live="polite"
+                      className={`mt-2 font-mono text-[11px] ${
+                        erreurMise ? "text-defeat" : "text-white/40"
+                      }`}
+                    >
+                      {erreurMise ??
+                        `De 1 à ${points.toLocaleString("fr-FR")} points, au choix.`}
+                    </p>
+                  </div>
                 </fieldset>
               </Panel>
               </>
@@ -552,13 +610,13 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
                 ? pretAuCombat
                   ? "Combat amical : le résultat rejoindra l'historique, sans mise."
                   : "Sélectionnez deux objets pour lancer le combat."
-                : points < Math.min(...MISES)
+                : points < 1
                   ? "Plus assez de points pour miser. Les prochains paris devront attendre."
-                  : miseAbordable > points
-                    ? `Mise trop élevée : il vous reste ${points.toLocaleString("fr-FR")} points.`
-                    : pretAuCombat && cotes && bet
-                      ? `Mise de ${miseAbordable} points engagée à la cote ${formatCote(cotes[bet])}. L'issue est tirée au sort.`
-                      : "Sélectionnez deux objets et placez votre pari pour lancer le combat."}
+                  : erreurMise
+                    ? erreurMise
+                    : pretAuCombat && cotes && bet && miseValide !== null
+                      ? `Mise de ${miseValide} points engagée à la cote ${formatCote(cotes[bet])}. L'issue est tirée au sort.`
+                      : "Sélectionnez deux objets, placez votre pari et indiquez une mise."}
             </p>
           </div>
         </>
@@ -567,16 +625,7 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
           fighterA={fighterA!}
           fighterB={fighterB!}
           resultat={resultat!}
-          pari={
-            connecte && bet && cotes
-              ? {
-                  bet,
-                  mise: miseAbordable,
-                  cote: cotes[bet],
-                  soldeAvant: soldeAvant ?? points,
-                }
-              : null
-          }
+          pari={pariJoue}
           onRejouer={reinitialiser}
         />
       )}

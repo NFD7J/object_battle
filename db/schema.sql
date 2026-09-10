@@ -136,4 +136,8 @@ CREATE INDEX IF NOT EXISTS fights_created_at_idx  ON fights (created_at DESC);
 CREATE INDEX IF NOT EXISTS fights_user_idx        ON fights (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS fights_object_1_idx    ON fights (object_1_id);
 CREATE INDEX IF NOT EXISTS fights_object_2_idx    ON fights (object_2_id);
-CREATE INDEX IF NOT EXISTS users_points_idx       ON users  (points DESC);
+-- Le classement se trie sur max_points, le meilleur solde jamais atteint.
+-- L'ancien index sur « points » ne servait plus qu'à ralentir les écritures :
+-- chaque combat met les deux colonnes à jour.
+DROP INDEX IF EXISTS users_points_idx;
+CREATE INDEX IF NOT EXISTS users_max_points_idx   ON users  (max_points DESC);

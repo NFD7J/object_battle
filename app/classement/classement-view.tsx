@@ -15,9 +15,9 @@ export function ClassementView() {
   const { connecte } = useGame();
   const joueur = useJoueur();
   const joueurs = useJoueurs();
-  const parPoints = [...joueurs].sort((a, b) => b.points - a.points);
+  const parRecord = [...joueurs].sort((a, b) => b.maxPoints - a.maxPoints);
   const podium = ORDRE_PODIUM.map((index) => ({
-    player: parPoints[index],
+    player: parRecord[index],
     rang: index + 1,
   })).filter((entree) => Boolean(entree.player));
 
@@ -26,7 +26,7 @@ export function ClassementView() {
       <PageHeader
         eyebrow="Hall of fame"
         title="Classement"
-        subtitle="Les meilleurs parieurs d'Object Battle. Le classement se trie par score, par nombre de victoires ou par taux de réussite."
+        subtitle="Les meilleurs parieurs d'Object Battle. Le classement retient le meilleur solde jamais atteint, et se trie aussi par nombre de victoires ou par taux de réussite."
       />
 
       <section
@@ -48,7 +48,7 @@ export function ClassementView() {
                     {player.username}
                   </p>
                   <p className="font-mono text-sm font-bold text-arcade-gold tabular-nums">
-                    {player.points.toLocaleString("fr-FR")} pts
+                    {player.maxPoints.toLocaleString("fr-FR")} pts
                   </p>
 
                   <div
@@ -90,16 +90,16 @@ export function ClassementView() {
             <div className="min-w-0 flex-1">
               <Tag className="bg-arcade-violet/25 text-arcade-cyan">Votre position</Tag>
               <p className="mt-2 font-display text-2xl text-white">
-                {parPoints.findIndex((player) => player.id === joueur.id) + 1}
+                {parRecord.findIndex((player) => player.id === joueur.id) + 1}
                 <sup className="text-sm">e</sup> sur {joueurs.length} joueurs
               </p>
             </div>
             <p className="text-right">
               <span className="block font-mono text-2xl font-bold text-arcade-gold tabular-nums">
-                {joueur.points.toLocaleString("fr-FR")}
+                {joueur.maxPoints.toLocaleString("fr-FR")}
               </span>
               <span className="block font-mono text-[10px] tracking-widest text-white/40 uppercase">
-                points
+                record
               </span>
             </p>
           </Panel>
