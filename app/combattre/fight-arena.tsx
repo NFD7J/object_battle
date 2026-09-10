@@ -2,12 +2,24 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 
 import { CombatantPortrait, OverallBadge } from "@/components/object-card";
-import { DUREE_PV, HealthBar, mouvementReduit } from "@/components/health-bar";
+import { HealthBar, mouvementReduit } from "@/components/health-bar";
 import { StatList } from "@/components/stat-bar";
 import { Panel, Tag, btn, btnLabel } from "@/components/ui";
+import {
+  AMPLEUR_REDUITE,
+  DUREE_DRAIN,
+  DUREE_ECHANGE,
+  DUREE_ENTREE,
+  DUREE_IMPACT,
+  construireCombat,
+  dureeDuCombat,
+  gesteAnime,
+  vecteurDeContact,
+} from "@/lib/choreographie";
+import type { Coup, Geste } from "@/lib/choreographie";
 import { PV_MAX, deltaParis, formatCote, gainPotentiel } from "@/lib/fight-engine";
 import type { Cotes, Issue, ResultatCombat } from "@/lib/fight-engine";
 import { useGame } from "@/lib/game-store";
@@ -16,26 +28,24 @@ import type { Object, Fight, Player } from "@/lib/types";
 type Slot = "A" | "B";
 type BetChoice = Issue;
 /**
- * « combat » est la passe d'armes : les portraits s'entrechoquent et les
- * jauges se vident. Le résultat est déjà connu à ce moment-là — il vient du
- * serveur — mais rien ne l'annonce encore à l'écran.
+ * « combat » est la passe d'armes : les cartes fondent l'une sur l'autre coup
+ * après coup, et chaque impact entame une jauge. Le résultat est déjà connu à
+ * ce moment-là — il vient du serveur — mais rien ne l'annonce encore à
+ * l'écran.
  */
 type Phase = "selection" | "combat" | "resultat";
 
 const MISES = [10, 25, 50, 100];
 
 /**
- * Temps d'affichage du combat : la descente des jauges, plus un souffle avant
- * l'annonce.
+ * `useLayoutEffect` dans le navigateur, `useEffect` au rendu serveur.
  *
- * Durée unique, identique pour tout le monde. « prefers-reduced-motion » ne la
- * raccourcit pas : le combat est le contenu de cet écran, pas une transition
- * qu'on pourrait sauter. Ce que le réglage désactive, ce sont les effets
- * décoratifs, et globals.css s'en charge déjà.
+ * Le sosie doit être posé avant que le navigateur ne peigne : l'original
+ * s'efface dans le rendu qui précède, et un effet passif laisserait une image
+ * où la carte n'est nulle part. La variante serveur évite l'avertissement de
+ * React, où la mise en page n'existe de toute façon pas.
  */
-function dureeDuCombat(): number {
-  return DUREE_PV + 1_000;
-}
+const useEffetAvantPeinture = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 /** Promesse résolue après `ms` millisecondes. */
 function attendre(ms: number): Promise<void> {
@@ -82,6 +92,12 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
   const [recherche, setRecherche] = useState("");
   const [phase, setPhase] = useState<Phase>("selection");
   const [resultat, setResultat] = useState<ResultatCombat | null>(null);
+  /** Suite des échanges à jouer, écrite dès que le serveur a tranché. */
+  const [coups, setCoups] = useState<Coup[]>([]);
+  /** Échange en cours. -1 : garde levée, le premier coup n'est pas parti. */
+  const [indexCoup, setIndexCoup] = useState(-1);
+  /** Jauges telles qu'elles sont à cet instant du combat. */
+  const [pvAffiches, setPvAffiches] = useState({ A: PV_MAX, B: PV_MAX });
   /** Pari tel qu'il a été engagé, figé au lancement du combat. */
   const [pariJoue, setPariJoue] = useState<PariEngage | null>(null);
   const [enCours, setEnCours] = useState(false);
@@ -90,6 +106,18 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
   // Le bouton « Lancer le combat » est en bas de page, l'arène tout en haut :
   // sans ce repère, le combat se jouerait hors de l'écran du joueur.
   const arene = useRef<HTMLElement>(null);
+
+  /*
+   * Les portraits, et la couche où ils volent.
+   *
+   * Le biseau des panneaux est un clip-path : il découpe tout ce qui déborde,
+   * portrait compris. Une carte ne peut donc pas quitter la sienne pour aller
+   * frapper l'autre. Pendant l'assaut, elle est doublée dans cette couche
+   * posée sur l'arène, que rien ne rogne, et qui couvre les deux camps.
+   */
+  const portraitA = useRef<HTMLDivElement>(null);
+  const portraitB = useRef<HTMLDivElement>(null);
+  const couche = useRef<HTMLDivElement>(null);
 
   // Les cotes sont mémorisées avec la paire à laquelle elles appartiennent.
   const [cotesRecues, setCotesRecues] = useState<{
@@ -135,6 +163,34 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
 
     return () => controleur.abort();
   }, [idA, idB]);
+
+  /*
+   * Déroulé de la passe d'armes.
+   *
+   * Deux minuteurs par échange : l'un déclenche l'assaut, l'autre change les
+   * PV au moment précis du contact, pas au départ du bond — sans quoi la jauge
+   * descendrait avant que la carte ait touché.
+   *
+   * Toute la séquence est programmée d'un coup plutôt qu'en chaîne : un seul
+   * nettoyage suffit alors si le joueur quitte la page en plein combat.
+   */
+  useEffect(() => {
+    if (phase !== "combat" || coups.length === 0) return;
+
+    const minuteurs = coups.flatMap((coup, index) => {
+      const debut = DUREE_ENTREE + index * DUREE_ECHANGE;
+
+      return [
+        setTimeout(() => setIndexCoup(index), debut),
+        setTimeout(
+          () => setPvAffiches({ A: coup.pvA, B: coup.pvB }),
+          debut + DUREE_IMPACT,
+        ),
+      ];
+    });
+
+    return () => minuteurs.forEach(clearTimeout);
+  }, [phase, coups]);
 
   /*
    * La mise est saisie librement, donc gardée en texte : un champ vide ou en
@@ -218,12 +274,19 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
         throw new Error(donnees.error?.message ?? "Le combat n'a pas pu être lancé.");
       }
 
-      // Le combat se joue d'abord à l'écran : les jauges partent de PV_MAX et
-      // descendent vers les PV renvoyés par le serveur.
-      setResultat(resultatDepuisCombat(donnees.combat, fighterA));
+      // Le combat se joue d'abord à l'écran. La chorégraphie invente le chemin
+      // qui mène aux PV renvoyés par le serveur : les coups s'enchaînent, mais
+      // la dernière jauge s'arrête exactement sur sa valeur.
+      const issue = resultatDepuisCombat(donnees.combat, fighterA);
+      const scenario = construireCombat(issue.pvA, issue.pvB);
+
+      setResultat(issue);
+      setCoups(scenario);
+      setIndexCoup(-1);
+      setPvAffiches({ A: PV_MAX, B: PV_MAX });
       setPhase("combat");
 
-      await attendre(dureeDuCombat());
+      await attendre(dureeDuCombat(scenario));
 
       // Le solde n'est mis à jour qu'une fois la passe d'armes finie : appliqué
       // plus tôt, le compteur de points de l'en-tête annoncerait le gain ou la
@@ -261,6 +324,9 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
   function reinitialiser() {
     setPhase("selection");
     setResultat(null);
+    setCoups([]);
+    setIndexCoup(-1);
+    setPvAffiches({ A: PV_MAX, B: PV_MAX });
     setPariJoue(null);
     setBet(null);
     setFighterB(null);
@@ -270,6 +336,47 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
   const listeFiltree = combatants.filter((combatant) =>
     combatant.name.toLowerCase().includes(recherche.trim().toLowerCase()),
   );
+
+  const coupActuel = indexCoup >= 0 ? (coups[indexCoup] ?? null) : null;
+
+  /**
+   * Ce que joue un camp dans l'échange en cours.
+   *
+   * Les rôles alternent d'un échange au suivant, donc la classe d'animation
+   * change à chaque fois : c'est ce changement qui relance l'animation CSS,
+   * sans avoir à remonter la carte ni à forcer un reflow.
+   */
+  function roleDe(slot: Slot): RoleCombat {
+    const commun = { coup: indexCoup, enCombat: phase === "combat" };
+
+    if (!coupActuel) return { ...commun, assaut: false, encaisse: false, pare: false };
+
+    // Double K.O. : personne ne charge, les deux s'écroulent ensemble.
+    if (coupActuel.attaquant === "double") {
+      return {
+        ...commun,
+        assaut: false,
+        encaisse: !coupActuel.pare,
+        pare: coupActuel.pare,
+      };
+    }
+
+    const attaque = coupActuel.attaquant === slot;
+
+    return {
+      ...commun,
+      assaut: attaque,
+      encaisse: !attaque && !coupActuel.pare,
+      pare: !attaque && coupActuel.pare,
+    };
+  }
+
+  const nomAttaquant =
+    coupActuel === null || coupActuel.attaquant === "double"
+      ? null
+      : coupActuel.attaquant === "A"
+        ? fighterA?.name
+        : fighterB?.name;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
@@ -319,9 +426,10 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
             slot="A"
             combatant={fighterA}
             active={activeSlot === "A" && phase === "selection"}
-            attacking={phase === "combat"}
-            pv={resultat ? resultat.pvA : PV_MAX}
-            pvAnimes={phase !== "selection"}
+            pv={pvAffiches.A}
+            dureePv={phase === "selection" ? 0 : DUREE_DRAIN}
+            role={roleDe("A")}
+            scene={{ portrait: portraitA, cible: portraitB, couche }}
             onSelect={() => setActiveSlot("A")}
             onClear={() => setFighterA(null)}
             disabled={phase !== "selection"}
@@ -342,13 +450,23 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
             slot="B"
             combatant={fighterB}
             active={activeSlot === "B" && phase === "selection"}
-            attacking={phase === "combat"}
-            pv={resultat ? resultat.pvB : PV_MAX}
-            pvAnimes={phase !== "selection"}
+            pv={pvAffiches.B}
+            dureePv={phase === "selection" ? 0 : DUREE_DRAIN}
+            role={roleDe("B")}
+            scene={{ portrait: portraitB, cible: portraitA, couche }}
             onSelect={() => setActiveSlot("B")}
             onClear={() => setFighterB(null)}
             disabled={phase !== "selection"}
             mirrored
+          />
+
+          {/* Couche de vol. Rendue vide et jamais modifiée par React : les
+              sosies y sont posés à la main, ce qui évite de faire transiter
+              par l'état une image purement décorative. */}
+          <div
+            ref={couche}
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 z-30"
           />
         </div>
       </section>
@@ -667,12 +785,32 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
         /* -------------------------------------------------------------- */
         /* Passe d'armes : ni roster ni verdict, seules les jauges parlent  */
         /* -------------------------------------------------------------- */
-        <section className="mt-12 text-center" aria-live="polite">
-          <p className="skew-title animate-glow font-display text-4xl text-arcade-orange sm:text-5xl">
+        <section className="mt-12 text-center">
+          <p
+            className="skew-title animate-glow font-display text-4xl text-arcade-orange sm:text-5xl"
+            aria-live="polite"
+          >
             Combat en cours…
           </p>
-          <p className="mt-3 font-mono text-xs tracking-[0.12em] text-white/50 uppercase">
-            Les coups pleuvent, les jauges tombent.
+
+          {/* Le fil des coups est décoratif : il défile trop vite pour être lu
+              à voix haute, et le verdict sera annoncé à la fin. */}
+          <p
+            aria-hidden="true"
+            className="mt-3 min-h-5 font-mono text-xs tracking-[0.12em] uppercase"
+          >
+            {coupActuel === null ? (
+              <span className="text-white/50">Les combattants se jaugent…</span>
+            ) : coupActuel.pare ? (
+              <span className="text-arcade-cyan">Coup paré !</span>
+            ) : coupActuel.attaquant === "double" ? (
+              <span className="text-draw">Les deux s&apos;effondrent !</span>
+            ) : (
+              <span className="text-white/70">
+                Échange {indexCoup + 1} / {coups.length} —{" "}
+                <strong className="text-arcade-gold">{nomAttaquant}</strong> frappe
+              </span>
+            )}
           </p>
         </section>
       ) : (
@@ -692,13 +830,78 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
    Emplacement de combattant
    -------------------------------------------------------------------------- */
 
+/** Ce qu'un camp joue dans l'échange en cours. */
+type RoleCombat = {
+  /** Numéro de l'échange, -1 tant que le premier coup n'est pas parti. */
+  coup: number;
+  /** La carte fond sur l'adversaire. */
+  assaut: boolean;
+  /** La carte encaisse le coup. */
+  encaisse: boolean;
+  /** La carte pare : le coup ne lui prend aucun PV. */
+  pare: boolean;
+  /** Vrai pendant toute la passe d'armes, y compris entre deux échanges. */
+  enCombat: boolean;
+};
+
+/** Geste joué par la carte dans cet échange, ou rien avant le premier coup. */
+function gesteDuRole(role: RoleCombat): Geste | null {
+  if (role.assaut) return "assaut";
+  if (role.encaisse) return "encaisse";
+  if (role.pare) return "parade";
+  return null;
+}
+
+/** Les repères dont une carte a besoin pour aller frapper l'autre. */
+type SceneCombat = {
+  /** Portrait de ce camp. */
+  portrait: RefObject<HTMLDivElement | null>;
+  /** Portrait d'en face : cible de l'assaut, et sens du recul quand on encaisse. */
+  cible: RefObject<HTMLDivElement | null>;
+  /** Couche libre au-dessus de l'arène, où vole la carte qui attaque. */
+  couche: RefObject<HTMLDivElement | null>;
+};
+
+/**
+ * Pose une copie du portrait dans la couche de vol, exactement là où se trouve
+ * l'original.
+ *
+ * C'est elle qui traverse l'arène : l'original ne le peut pas, le biseau de
+ * son panneau le découpe au bord. La copie est décorative et sort de l'arbre
+ * React, d'où le `aria-hidden` — un lecteur d'écran verrait sinon le
+ * combattant en double.
+ */
+function poserSosie(portrait: HTMLElement, couche: HTMLElement): HTMLElement {
+  const depart = portrait.getBoundingClientRect();
+  const repere = couche.getBoundingClientRect();
+  const sosie = portrait.cloneNode(true) as HTMLElement;
+
+  sosie.setAttribute("aria-hidden", "true");
+  Object.assign(sosie.style, {
+    position: "absolute",
+    left: `${depart.left - repere.left}px`,
+    top: `${depart.top - repere.top}px`,
+    width: `${depart.width}px`,
+    height: `${depart.height}px`,
+    margin: "0",
+    // L'original est déjà masqué au moment de la copie — c'est le même rendu
+    // qui déclenche les deux. Le sosie, lui, doit se voir.
+    visibility: "visible",
+  });
+
+  couche.appendChild(sosie);
+
+  return sosie;
+}
+
 function FighterSlot({
   slot,
   combatant,
   active,
-  attacking,
   pv,
-  pvAnimes,
+  dureePv,
+  role,
+  scene,
   mirrored = false,
   disabled = false,
   onSelect,
@@ -707,15 +910,69 @@ function FighterSlot({
   slot: Slot;
   combatant: Object | null;
   active: boolean;
-  attacking: boolean;
   pv: number;
-  pvAnimes: boolean;
+  /** Temps de descente de la jauge. 0 hors combat : la valeur s'affiche sèche. */
+  dureePv: number;
+  role: RoleCombat;
+  scene: SceneCombat;
   mirrored?: boolean;
   disabled?: boolean;
   onSelect: () => void;
   onClear: () => void;
 }) {
   const accent = slot === "A" ? "text-arcade-violet" : "text-arcade-blue";
+
+  const { coup, assaut, encaisse, pare, enCombat } = role;
+  const { portrait: refPortrait, cible: refCible, couche: refCouche } = scene;
+
+  // Déduit du rôle plutôt que gardé en état : la carte est en vol exactement
+  // quand elle attaque, et l'effet ci-dessous pose le sosie sur la même
+  // condition. Deux sources pour un seul fait finiraient par diverger.
+  const enVol = coup >= 0 && assaut;
+
+  /*
+   * Le geste est joué à la main, échange par échange.
+   *
+   * `element.animate()` plutôt qu'une classe CSS : le geste redémarre à coup
+   * sûr même si le rôle ne change pas d'un échange au suivant, et il échappe à
+   * la règle globale « prefers-reduced-motion », qui couperait net la seule
+   * chose qui se passe à l'écran. Le réglage est respecté autrement — le
+   * mouvement est réduit, pas supprimé.
+   */
+  useEffetAvantPeinture(() => {
+    const noeud = refPortrait.current;
+    const cible = refCible.current;
+    const geste = gesteDuRole({ coup, assaut, encaisse, pare, enCombat });
+
+    if (!noeud || !cible || coup < 0 || !geste) return;
+
+    // Mesuré à chaque coup, jamais mis en cache : la fenêtre a pu être
+    // redimensionnée entre deux échanges, et la carte raterait sa cible.
+    const vers = vecteurDeContact(noeud, cible);
+    const ampleur = mouvementReduit() ? AMPLEUR_REDUITE : 1;
+    const { images, options } = gesteAnime(geste, vers, ampleur);
+
+    // Le défenseur encaisse sur place : le mouvement est court, son panneau le
+    // contient. L'attaquant, lui, doit traverser tout l'espace qui les sépare.
+    if (geste !== "assaut") {
+      const animation = noeud.animate(images, options);
+      return () => animation.cancel();
+    }
+
+    const couche = refCouche.current;
+    if (!couche) return;
+
+    const sosie = poserSosie(noeud, couche);
+    const animation = sosie.animate(images, options);
+
+    // Le sosie revenu au repos se superpose exactement à l'original : le
+    // laisser jusqu'à l'échange suivant ne se voit pas, et évite un minuteur
+    // de plus à tenir synchronisé.
+    return () => {
+      animation.cancel();
+      sosie.remove();
+    };
+  }, [coup, assaut, encaisse, pare, enCombat, refPortrait, refCible, refCouche]);
 
   if (!combatant) {
     return (
@@ -751,14 +1008,19 @@ function FighterSlot({
         <Tag className={`bg-panel-soft ${accent}`}>Combattant {slot}</Tag>
       </div>
 
-      <div
-        className={`mt-4 ${attacking ? (slot === "A" ? "animate-clash-left" : "animate-clash-right") : ""}`}
-      >
-        <CombatantPortrait
-          combatant={combatant}
-          className="cut-corner-sm mx-auto h-40 w-40"
-          sizes="160px"
-        />
+      {/* Deux couches imbriquées : le balancement de garde, décoratif, tourne
+          en CSS sur l'extérieur ; l'assaut se joue sur l'intérieur. Séparées,
+          elles ne s'écrasent pas — un élément ne porte qu'une transformation. */}
+      <div className={`mt-4 ${enCombat ? "animate-garde" : ""}`}>
+        {/* Ce div épouse exactement le portrait : c'est lui qu'on mesure pour
+            viser l'adversaire, et lui qu'on double pendant l'assaut. */}
+        <div ref={refPortrait} className={`mx-auto h-40 w-40 ${enVol ? "invisible" : ""}`}>
+          <CombatantPortrait
+            combatant={combatant}
+            className="cut-corner-sm h-full w-full"
+            sizes="160px"
+          />
+        </div>
       </div>
 
       <h3
@@ -768,7 +1030,7 @@ function FighterSlot({
       </h3>
 
       <div className="mt-4">
-        <HealthBar pv={pv} mirrored={mirrored} anime={pvAnimes} />
+        <HealthBar pv={pv} mirrored={mirrored} duree={dureePv} />
       </div>
 
       <div className="mt-5 border-t border-edge pt-5">

@@ -66,6 +66,11 @@ type FightRow = {
   /** NUMERIC : PostgreSQL le renvoie en chaîne, jamais en nombre. */
   bet_cote: string | number;
   created_at: string | Date;
+  /** Auteur du combat. NULL pour un visiteur, ou un compte supprimé depuis. */
+  user_id: number | null;
+  /** Colonnes de users, nulles quand le LEFT JOIN ne trouve personne. */
+  host_username: string | null;
+  host_avatar_color: string | null;
   fighter_a: ObjectRow;
   fighter_b: ObjectRow;
 };
@@ -112,7 +117,7 @@ function toObject(row: ObjectRow): Object {
     description: row.description,
     image: row.image,
     stats,
-    overall: (row.power*1.20) + (row.resistance*1.15) + (row.speed*1.05) + (row.intelligence*1.10),
+    overall: (row.power*1.20) + (row.resistance*1.10) + (row.speed*1.05) + (row.intelligence*1.15),
     nbWins: row.nb_wins,
     nbLosses: row.nb_losses,
   };
@@ -164,6 +169,18 @@ function toFight(row: FightRow): Fight {
   // sont déduites de l'écart entre les deux, sur une base de PV_MAX.
   const { pvA, pvB } = pvDepuisScores(row.score_1, row.score_2, row.winner_id === null);
 
+  // Pas de ligne users en face : le combat vient d'un visiteur, ou d'un compte
+  // supprimé depuis. Dans les deux cas l'écran n'a personne à nommer.
+  const organisateur =
+    row.user_id !== null && row.host_username !== null
+      ? {
+          id: row.user_id,
+          username: row.host_username,
+          // NOT NULL en base ; le repli ne sert qu'à satisfaire le LEFT JOIN.
+          avatarColor: row.host_avatar_color ?? "#a855f7",
+        }
+      : null;
+
   return {
     id: row.id,
     fighterA: toObject(row.fighter_a),
@@ -172,6 +189,7 @@ function toFight(row: FightRow): Fight {
     pvA,
     pvB,
     bet,
+    organisateur,
     createdAt: toIsoDate(row.created_at),
   };
 }
@@ -504,11 +522,17 @@ const SELECT_COMBATS = `
   SELECT
     f.id, f.winner_id, f.score_1, f.score_2,
     f.bet_on_id, f.bet_amount, f.bet_delta, f.bet_cote, f.created_at,
+    f.user_id,
+    u.username     AS host_username,
+    u.avatar_color AS host_avatar_color,
     to_jsonb(a) AS fighter_a,
     to_jsonb(b) AS fighter_b
   FROM fights f
   JOIN objects a ON a.id = f.object_1_id
   JOIN objects b ON b.id = f.object_2_id
+  -- LEFT, impérativement : une jointure fermée ferait disparaître de
+  -- l'historique tous les combats lancés par des visiteurs.
+  LEFT JOIN users u ON u.id = f.user_id
 `;
 
 /** Les derniers combats, tous joueurs confondus. Accueil et Historique. */

@@ -26,6 +26,14 @@ export const PONDERATIONS = {
   aleatoire: 1.50,
 } as const;
 
+/**
+ * Écart de score en dessous duquel le combat est déclaré nul.
+ *
+ * Exporté parce que la page « À propos » annonce la règle au joueur : une
+ * valeur recopiée là-bas finirait par mentir au premier réglage du moteur.
+ */
+export const ECART_MATCH_NUL = 5;
+
 export type FightOutcome = {
   scoreA: number;
   scoreB: number;
@@ -56,7 +64,12 @@ export function resolveFight(a: Object, b: Object): FightOutcome {
   return {
     scoreA,
     scoreB,
-    winnerId: (scoreA < scoreB + 5 && scoreA > scoreB - 5) ? null : scoreA > scoreB ? a.id : b.id,
+    winnerId:
+      Math.abs(scoreA - scoreB) < ECART_MATCH_NUL
+        ? null
+        : scoreA > scoreB
+          ? a.id
+          : b.id,
   };
 }
 

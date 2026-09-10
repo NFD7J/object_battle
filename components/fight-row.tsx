@@ -63,6 +63,32 @@ export function BetResult({ fight }: { fight: Fight }) {
   );
 }
 
+/**
+ * Qui a organisé le combat.
+ *
+ * Le pseudo garde sa casse d'origine : d'où ce bandeau écrit à la main plutôt
+ * qu'un `Tag`, qui passe son contenu en majuscules.
+ */
+function Organisateur({ joueur }: { joueur: Fight["organisateur"] }) {
+  return (
+    <span className="tag-slant inline-flex items-center gap-2 bg-panel-soft px-3.5 py-1 font-mono text-[11px]">
+      <span className="tracking-[0.18em] text-white/40 uppercase">Lancé par</span>
+      {joueur ? (
+        <>
+          <span
+            aria-hidden="true"
+            className="h-2 w-2 shrink-0 rounded-full"
+            style={{ backgroundColor: joueur.avatarColor }}
+          />
+          <span className="text-white/80">{joueur.username}</span>
+        </>
+      ) : (
+        <span className="text-white/50 italic">Invité</span>
+      )}
+    </span>
+  );
+}
+
 /** Une ligne d'historique de combat (§4.5), réutilisée sur l'accueil. */
 export function FightRow({ fight, compact = false }: { fight: Fight; compact?: boolean }) {
   const winner = winnerOf(fight);
@@ -127,10 +153,11 @@ export function FightRow({ fight, compact = false }: { fight: Fight; compact?: b
           </div>
 
           {!compact ? (
-            <p className="mt-3">
+            <p className="mt-3 flex flex-wrap items-center gap-2">
               <Tag className="bg-panel-soft text-white/50">
                 <time dateTime={fight.createdAt}>{formatFightDate(fight.createdAt)}</time>
               </Tag>
+              <Organisateur joueur={fight.organisateur} />
             </p>
           ) : null}
         </div>

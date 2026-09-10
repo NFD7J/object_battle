@@ -2,7 +2,32 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { PageHeader, Panel, SectionTitle, btn, btnLabel } from "@/components/ui";
+import { ECART_MATCH_NUL, PONDERATIONS } from "@/lib/combat";
 import { STAT_HINTS, STAT_KEYS, STAT_LABELS } from "@/lib/types";
+
+/**
+ * La formule affichée est construite à partir des pondérations du moteur, et
+ * non recopiée : régler le moteur met la page à jour du même geste.
+ */
+const LIGNES_SCORE = [
+  ...STAT_KEYS.map((cle) => ({ label: STAT_LABELS[cle], poids: PONDERATIONS[cle] })),
+  { label: "Aléatoire", poids: PONDERATIONS.aleatoire },
+];
+
+/** Écriture française d'un poids : 1.2 devient « 1,20 ». */
+function formatPoids(poids: number): string {
+  return poids.toFixed(2).replace(".", ",");
+}
+
+const FORMULE = LIGNES_SCORE.map(
+  ({ label, poids }, index) =>
+    `${index === 0 ? "score =" : "      +"} ${label.padEnd(13)}× ${formatPoids(poids)}`,
+).join("\n");
+
+/** Score maximal : toutes les caractéristiques à 100 et l'aléatoire au plafond. */
+const SCORE_MAX = Math.round(
+  LIGNES_SCORE.reduce((total, ligne) => total + ligne.poids, 0) * 100,
+);
 
 export const metadata: Metadata = {
   title: "À propos",
@@ -77,24 +102,32 @@ export default function AProposPage() {
           <SectionTitle>Le calcul du score</SectionTitle>
           <Panel innerClassName="p-6">
             <p className="leading-relaxed text-white/75">
-              Le score d&apos;un objet dans un combat est une somme pondérée de
-              ses caractéristiques, à laquelle s&apos;ajoute une part
-              d&apos;aléatoire. C&apos;est cette part de hasard qui rend les
-              affiches imprévisibles : un objet plus faible sur le papier peut
-              parfaitement l&apos;emporter.
+              Chaque objet reçoit un score, calculé isolément : il ne sait pas
+              qui se tient en face de lui. Le plus haut score l&apos;emporte.
             </p>
 
             <pre className="mt-5 overflow-x-auto border border-edge bg-void p-4 font-mono text-sm text-arcade-cyan">
-              <code>{`score = (puissance    x poids₁)
-      + (résistance   x poids₂)
-      + (rapidité     x poids₃)
-      + (intelligence x poids₄)
-      + (aléatoire    x poids₅)`}</code>
+              <code>{FORMULE}</code>
             </pre>
 
+            <p className="mt-4 leading-relaxed text-white/75">
+              L&apos;aléatoire est un tirage entre 0 et 100, refait à chaque
+              combat. Il pèse plus lourd que n&apos;importe quelle
+              caractéristique, et c&apos;est voulu : sans lui, l&apos;affiche
+              serait jouée d&apos;avance et le pari n&apos;aurait aucun
+              intérêt. Un objet plus faible sur le papier garde donc toujours
+              sa chance. Le score plafonne à {SCORE_MAX}.
+            </p>
+
+            <p className="mt-4 leading-relaxed text-white/75">
+              Si les deux scores se tiennent à moins de {ECART_MATCH_NUL}{" "}
+              points, personne ne l&apos;emporte : c&apos;est un double K.O., et
+              les deux jauges tombent à zéro.
+            </p>
+
             <p className="mt-4 text-sm text-white/55">
-              Les pondérations exactes seront fixées lors de la mise en place du
-              moteur de combat.
+              Le calcul tourne uniquement sur le serveur. Le navigateur reçoit
+              le résultat, jamais de quoi le fabriquer.
             </p>
           </Panel>
         </section>

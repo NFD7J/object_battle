@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { FightRow } from "@/components/fight-row";
 import { Panel } from "@/components/ui";
@@ -14,6 +14,35 @@ const FILTRES: { key: Filtre; label: string }[] = [
   { key: "gain", label: "Paris gagnés" },
   { key: "perte", label: "Paris perdus" },
 ];
+
+/** Longueur d'affichage : un nombre de lignes, ou tout l'historique. */
+export type ChoixLimite = number | "tout";
+
+/** Bouton de la barre d'options, partagé par les filtres et le sélecteur. */
+function BoutonBarre({
+  actif,
+  onClick,
+  children,
+}: {
+  actif: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={actif}
+      className={`tag-slant px-4 py-2 font-mono text-xs tracking-[0.14em] uppercase transition-colors ${
+        actif
+          ? "bg-linear-to-r from-arcade-violet to-arcade-blue font-bold text-white"
+          : "bg-panel text-white/60 hover:bg-panel-soft hover:text-white"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
 
 /** Résumé chiffré de l'historique, branché sur le solde live. */
 export function HistoriqueResume({ fights: fightsProp }: { fights?: Fight[] } = {}) {
@@ -48,6 +77,7 @@ export function HistoriqueResume({ fights: fightsProp }: { fights?: Fight[] } = 
 export function HistoryList({
   compact = false,
   limit,
+  limitOptions,
   combatantId,
   filtres = true,
   emptyTitle = "Aucun combat ici",
@@ -55,7 +85,10 @@ export function HistoryList({
   fights: fightsProp,
 }: {
   compact?: boolean;
+  /** Nombre de lignes affichées. Avec `limitOptions`, c'est le choix initial. */
   limit?: number;
+  /** Longueurs proposées au lecteur. Absent : la liste garde `limit` en dur. */
+  limitOptions?: ChoixLimite[];
   combatantId?: number;
   filtres?: boolean;
   emptyTitle?: string;
@@ -65,6 +98,10 @@ export function HistoryList({
   const { fights: fightsStore } = useGame();
   const fights = fightsProp ?? fightsStore;
   const [filtre, setFiltre] = useState<Filtre>("tous");
+  const [limiteChoisie, setLimiteChoisie] = useState<ChoixLimite>( limit ?? limitOptions?.[0] ?? "tout");
+
+  // Sans sélecteur, la longueur reste celle imposée par la page appelante.
+  const limiteActive = limitOptions?.length ? limiteChoisie : limit;
 
   let liste = fights;
   if (combatantId != null) {
@@ -75,37 +112,55 @@ export function HistoryList({
   if (filtre !== "tous") {
     liste = liste.filter((fight) => fight.bet?.outcome === filtre);
   }
-  if (limit != null) {
-    liste = liste.slice(0, limit);
+  // Le total avant coupe : c'est lui qui dit si « Tout » change quelque chose.
+  const nbTotal = liste.length;
+  if (limiteActive != null && limiteActive !== "tout") {
+    liste = liste.slice(0, limiteActive);
   }
 
   return (
     <div>
-      {filtres ? (
-        <div className="mb-6 flex flex-wrap gap-2" role="group" aria-label="Filtrer l'historique">
-          {FILTRES.map((option) => {
-            const actif = filtre === option.key;
-            return (
-              <button
-                key={option.key}
-                type="button"
-                onClick={() => setFiltre(option.key)}
-                aria-pressed={actif}
-                className={`tag-slant px-4 py-2 font-mono text-xs tracking-[0.14em] uppercase transition-colors ${
-                  actif
-                    ? "bg-linear-to-r from-arcade-violet to-arcade-blue font-bold text-white"
-                    : "bg-panel text-white/60 hover:bg-panel-soft hover:text-white"
-                }`}
-              >
-                {option.label}
-              </button>
-            );
-          })}
+      {filtres || limitOptions?.length ? (
+        <div className="mb-6 flex flex-wrap items-center justify-end gap-x-6 gap-y-3">
+          {filtres ? (
+            <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrer l'historique">
+              {FILTRES.map((option) => (
+                <BoutonBarre
+                  key={option.key}
+                  actif={filtre === option.key}
+                  onClick={() => setFiltre(option.key)}
+                >
+                  {option.label}
+                </BoutonBarre>
+              ))}
+            </div>
+          ) : null}
+
+          {limitOptions?.length ? (
+            <div
+              className="flex flex-wrap items-center gap-2"
+              role="group"
+              aria-label="Nombre de combats affichés"
+            >
+              <span className="font-mono text-[11px] tracking-[0.14em] text-white/50 uppercase">
+                Afficher
+              </span>
+              {limitOptions.map((option) => (
+                <BoutonBarre
+                  key={String(option)}
+                  actif={limiteChoisie === option}
+                  onClick={() => setLimiteChoisie(option)}
+                >
+                  {option === "tout" ? "Tout" : option}
+                </BoutonBarre>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
       <p className="sr-only" aria-live="polite">
-        {liste.length} combats affichés.
+        {liste.length} combats affichés sur {nbTotal}.
       </p>
 
       {liste.length > 0 ? (

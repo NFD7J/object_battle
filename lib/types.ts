@@ -70,6 +70,9 @@ export type FightBet = {
   delta: number;
 };
 
+/** Identité du joueur ayant lancé un combat, réduite à ce que l'écran affiche. */
+export type FightHost = Pick<Player, "id" | "username" | "avatarColor">;
+
 /** Un combat passé, c'est-à-dire une ligne de la table « fights ». */
 export type Fight = {
   id: number;
@@ -83,6 +86,12 @@ export type Fight = {
   pvB: number;
   /** Pari engagé sur ce combat, ou `null` si le combat a été lancé sans pari. */
   bet: FightBet | null;
+  /**
+   * Joueur qui a organisé le combat, ou `null` s'il vient d'un visiteur non
+   * connecté. `user_id` passant à NULL à la suppression d'un compte, un combat
+   * orphelin retombe lui aussi ici : l'écran l'affiche comme un invité.
+   */
+  organisateur: FightHost | null;
   createdAt: string;
 };
 

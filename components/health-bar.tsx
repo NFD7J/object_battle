@@ -1,26 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { PV_MAX } from "@/lib/fight-engine";
 
 /**
  * Barre de vie d'un combattant. Tous les objets démarrent à `PV_MAX` PV : la
  * jauge ne dépend d'aucune caractéristique, seulement de l'issue du combat.
- */
-
-/**
- * Durée de la descente de la jauge, en millisecondes.
  *
- * Volontairement longue : le combat n'est pas une transition, c'est le moment
- * qu'on regarde. Douze secondes laissent aussi la place à ce qui viendra s'y
- * greffer plus tard — commentaires en direct, échanges de coups annoncés.
- *
- * Exportée pour que l'arène attende exactement la fin du vidage avant
- * d'annoncer le résultat : une seule valeur à changer pour rallonger ou
- * raccourcir le combat.
+ * La jauge ne connaît pas le déroulé du combat : elle rejoint la valeur qu'on
+ * lui donne, dans le temps qu'on lui donne. C'est l'arène qui décide quand un
+ * coup porte et de combien il entame la barre (lib/choreographie.ts).
  */
-export const DUREE_PV = 12_000;
 
 /** Vrai si le système demande de limiter les animations (accessibilité). */
 export function mouvementReduit(): boolean {
@@ -40,19 +31,22 @@ function couleur(pv: number): { barre: string; texte: string } {
 export function HealthBar({
   pv,
   mirrored = false,
-  anime = false,
+  duree = 0,
   size = "md",
   nom,
 }: {
   pv: number;
   mirrored?: boolean;
-  /** Fait descendre la jauge depuis `PV_MAX` à l'affichage du résultat. */
-  anime?: boolean;
+  /**
+   * Temps mis pour rejoindre `pv`, en millisecondes. À 0 — le cas d'une jauge
+   * de l'historique — la valeur s'affiche telle quelle, sans descente.
+   */
+  duree?: number;
   size?: "sm" | "md";
   /** Libellé à gauche (nom du combattant en historique). */
   nom?: string;
 }) {
-  const affiche = usePvAnimes(pv, anime);
+  const affiche = usePvProgressif(pv, duree);
   const pourcentage = Math.max(0, Math.min(100, (affiche / PV_MAX) * 100));
   const { barre, texte } = couleur(affiche);
   const horsCombat = affiche === 0;
@@ -88,8 +82,10 @@ export function HealthBar({
             : `Points de vie : ${affiche} sur ${PV_MAX}`
         }
       >
+        {/* Pas de transition CSS : la largeur suit `affiche`, que la descente
+            anime déjà image par image. Les deux se combattraient. */}
         <div
-          className={`h-full bg-linear-to-r transition-[width] duration-200 ease-linear ${barre}`}
+          className={`h-full bg-linear-to-r ${barre}`}
           style={{ width: `${pourcentage}%` }}
         />
         {/* Encoches décoratives, façon jauge de borne d'arcade */}
@@ -107,36 +103,49 @@ export function HealthBar({
 }
 
 /**
- * Fait défiler les PV de `PV_MAX` jusqu'à la valeur finale.
+ * Fait descendre la jauge depuis là où elle en est jusqu'à `cible`.
+ *
+ * Chaque coup encaissé change la cible, et la barre repart de sa valeur
+ * courante : c'est ce qui donne l'à-coup, là où une descente unique et
+ * régulière ne racontait rien du combat.
  *
  * Cette descente ne s'efface PAS devant « prefers-reduced-motion ». Elle n'est
- * pas un ornement : c'est le déroulé du combat, la seule chose qui se passe à
- * l'écran pendant ces douze secondes. La couper reviendrait à supprimer la
- * fonctionnalité, pas à l'adoucir.
- *
- * Le réglage garde tout son effet sur ce qui est réellement décoratif — le
- * tremblement des portraits, le halo du « VS » — que la règle
- * @media (prefers-reduced-motion: reduce) de globals.css neutralise déjà.
+ * pas un ornement : c'est le déroulé du combat. La couper reviendrait à
+ * supprimer la fonctionnalité, pas à l'adoucir. Le réglage garde tout son
+ * effet sur ce qui est réellement décoratif — le bond des cartes, le halo du
+ * « VS » — que la règle @media de globals.css neutralise déjà.
  */
-function usePvAnimes(pv: number, anime: boolean): number {
-  const [affiche, setAffiche] = useState(anime ? PV_MAX : pv);
+function usePvProgressif(cible: number, duree: number): number {
+  const [affiche, setAffiche] = useState(cible);
+
+  // Point de départ de la prochaine descente. En ref et non en dépendance :
+  // sinon chaque image relancerait l'effet, qui repartirait de zéro.
+  const courant = useRef(cible);
+  useEffect(() => {
+    courant.current = affiche;
+  }, [affiche]);
 
   useEffect(() => {
-    if (!anime || pv === PV_MAX) {
-      setAffiche(pv);
+    if (duree <= 0) {
+      setAffiche(cible);
       return;
     }
+
+    const depart = courant.current;
+    if (depart === cible) return;
 
     let debut: number | null = null;
     let frame = requestAnimationFrame(function etape(horodatage) {
       debut ??= horodatage;
-      const avancement = Math.min(1, (horodatage - debut) / DUREE_PV);
-      setAffiche(Math.round(PV_MAX + (pv - PV_MAX) * avancement));
+      const avancement = Math.min(1, (horodatage - debut) / duree);
+      // Décélération : le coup entame la jauge d'un coup sec, puis s'amortit.
+      const amorti = 1 - (1 - avancement) ** 3;
+      setAffiche(Math.round(depart + (cible - depart) * amorti));
       if (avancement < 1) frame = requestAnimationFrame(etape);
     });
 
     return () => cancelAnimationFrame(frame);
-  }, [pv, anime]);
+  }, [cible, duree]);
 
   return affiche;
 }

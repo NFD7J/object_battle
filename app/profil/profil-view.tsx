@@ -129,7 +129,7 @@ export function ProfilView({ objets }: { objets: Object[] }) {
         </section>
 
         <section className="mt-12">
-          <SectionTitle href="/objets" linkLabel="Tout le roster">
+          <SectionTitle href="/objets" linkLabel="Tout les objets">
             Objets les plus joués
           </SectionTitle>
           <ul className="grid gap-3 sm:grid-cols-3">
@@ -158,10 +158,10 @@ export function ProfilView({ objets }: { objets: Object[] }) {
         </section>
 
         <section className="mt-12">
-          <SectionTitle href="/historique" linkLabel="Tout l'historique">
+          <SectionTitle href="/historique" linkLabel="">
             Mes derniers combats
           </SectionTitle>
-          <HistoryList compact limit={3} filtres={false} />
+          <HistoryList compact limitOptions={[5, 10, 20, "tout"]} filtres={false} />
         </section>
       </div>
     </>

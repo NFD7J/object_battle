@@ -29,8 +29,7 @@ function cleDeSignature(): Uint8Array {
   if (!secret) {
     throw new Error(
       "SESSION_SECRET est absent. Générez-en un avec :\n" +
-        '  node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"\n' +
-        "puis ajoutez-le à .env.local.",
+        '  node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'base64\'))"\n',
     );
   }
 
