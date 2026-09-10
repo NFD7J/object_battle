@@ -127,11 +127,12 @@ function toFight(row: FightRow): Fight {
     fighterA: toCombatant(row.fighter_a),
     fighterB: toCombatant(row.fighter_b),
     winnerId: row.winner_id,
-    scoreA: row.score_1,
-    scoreB: row.score_2,
+    pvA: row.score_1,
+    pvB: row.score_2,
     bet: {
       on: row.bet_on_id ?? "nul",
       amount: row.bet_amount,
+      cote: row.bet_amount === 0 ? 0 : Math.abs(row.bet_delta / row.bet_amount),
       outcome: row.bet_delta > 0 ? "gain" : row.bet_delta < 0 ? "perte" : "nul",
       delta: row.bet_delta,
     },
@@ -191,7 +192,7 @@ function identifiantValide(valeur: unknown, champ: string): number {
 
 /**
  * L'image doit être un chemin local (/objets/...) ou une URL https, typiquement
- * celle renvoyée par Vercel Blob (§7). On refuse tout le reste, notamment les
+ * celle renvoyée par Cloudinary (§7). On refuse tout le reste, notamment les
  * URL « javascript: » ou « data: ».
  */
 function imageValide(valeur: unknown): string {

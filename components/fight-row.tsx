@@ -4,7 +4,7 @@ import { CombatantPortrait } from "@/components/combatant-card";
 import { HealthBar } from "@/components/health-bar";
 import { Panel, Tag } from "@/components/ui";
 import { formatCote } from "@/lib/fight-engine";
-import { formatFightDate } from "@/lib/mock-data";
+import { formatFightDate } from "@/lib/format";
 import type { Combatant, Fight } from "@/lib/types";
 
 /** Le camp gagnant, ou null en cas de match nul. */

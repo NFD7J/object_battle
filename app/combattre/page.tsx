@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { FightArena } from "@/app/combattre/fight-arena";
 import { PageHeader } from "@/components/ui";
+import { getAllObjects } from "@/lib/queries";
 
 export const metadata: Metadata = {
   title: "Combattre",
@@ -9,7 +10,9 @@ export const metadata: Metadata = {
     "Sélectionnez deux objets, misez vos points sur un vainqueur ou sur le match nul, puis lancez le combat dans l'arène Object Battle.",
 };
 
-export default function CombattrePage() {
+export default async function CombattrePage() {
+  const combatants = await getAllObjects();
+
   return (
     <>
       <PageHeader
@@ -17,7 +20,7 @@ export default function CombattrePage() {
         title="Combattre"
         subtitle="Deux objets entrent, un seul ressort. Choisissez vos combattants, placez votre pari, puis lancez le round."
       />
-      <FightArena />
+      <FightArena combatants={combatants} />
     </>
   );
 }

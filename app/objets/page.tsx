@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { CombatantCard } from "@/components/combatant-card";
+import { ObjectCard } from "@/components/combatant-card";
 import { PageHeader, btn, btnLabel } from "@/components/ui";
-import { combatants } from "@/lib/mock-data";
+import { getAllObjects } from "@/lib/queries";
 
 export const metadata: Metadata = {
   title: "Objets",
@@ -11,7 +11,11 @@ export const metadata: Metadata = {
     "Tous les objets disponibles dans Object Battle : image, statistiques, score global et fiche détaillée pour chaque combattant.",
 };
 
-export default function ObjetsPage() {
+export default async function ObjetsPage() {
+  // Composant serveur : la requête part directement vers PostgreSQL, sans
+  // passer par /api/objets. Rien de tout ceci n'atteint le navigateur.
+  const combatants = await getAllObjects();
+
   return (
     <>
       <PageHeader
@@ -32,7 +36,7 @@ export default function ObjetsPage() {
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {combatants.map((combatant, index) => (
             <li key={combatant.id}>
-              <CombatantCard combatant={combatant} priority={index < 3} />
+              <ObjectCard combatant={combatant} priority={index < 3} />
             </li>
           ))}
         </ul>

@@ -11,7 +11,6 @@ import {
 
 import { deltaParis } from "@/lib/fight-engine";
 import type { Issue, ResultatCombat } from "@/lib/fight-engine";
-import { currentPlayer, fights as fightsInitiaux, players } from "@/lib/mock-data";
 import type { Combatant, Fight, Player } from "@/lib/types";
 
 const CLE_STOCKAGE = "object-battle-partie";
@@ -36,14 +35,22 @@ export type CombatAEnregistrer = {
 
 type GameContextValue = EtatPartie & {
   enregistrerCombat: (entree: CombatAEnregistrer) => void;
+  /** Joueur connecté tel que la base le connaît, ou null si personne ne l'est. */
+  joueur: Player | null;
+  /** Classement complet venant de la base. */
+  joueurs: Player[];
 };
 
-const ETAT_INITIAL: EtatPartie = {
-  points: currentPlayer.points,
-  maxPoints: currentPlayer.maxPoints,
-  nbVictoires: currentPlayer.nbVictoires,
-  nbCombats: currentPlayer.nbCombats,
-  fights: fightsInitiaux,
+/**
+ * État de repli, utilisé pour le rendu serveur et tant que le provider n'a pas
+ * transmis les données. Les vraies valeurs arrivent en props de GameProvider.
+ */
+const ETAT_VIDE: EtatPartie = {
+  points: 0,
+  maxPoints: 0,
+  nbVictoires: 0,
+  nbCombats: 0,
+  fights: [],
 };
 
 const GameContext = createContext<GameContextValue | null>(null);
@@ -105,11 +112,27 @@ function composerCombat(entree: CombatAEnregistrer, id: number): Fight {
 }
 
 const listeners = new Set<() => void>();
-let etatCourant: EtatPartie = ETAT_INITIAL;
+let etatCourant: EtatPartie = ETAT_VIDE;
+let dejaInitialise = false;
 
-if (typeof window !== "undefined") {
-  const sauvegarde = lireStockage();
-  if (sauvegarde) etatCourant = sauvegarde;
+/**
+ * Amorce le store avec les données du serveur, une seule fois.
+ * Une partie déjà sauvegardée dans le navigateur reprend la main si elle existe.
+ */
+function initialiser(joueur: Player | null, fightsInitiaux: Fight[]) {
+  if (dejaInitialise) return;
+  dejaInitialise = true;
+
+  const depuisServeur: EtatPartie = {
+    points: joueur?.points ?? 0,
+    maxPoints: joueur?.maxPoints ?? 0,
+    nbVictoires: joueur?.nbVictoires ?? 0,
+    nbCombats: joueur?.nbCombats ?? 0,
+    fights: fightsInitiaux,
+  };
+
+  const sauvegarde = typeof window !== "undefined" ? lireStockage() : null;
+  etatCourant = sauvegarde ?? depuisServeur;
 }
 
 function emit() {
@@ -128,7 +151,7 @@ function getSnapshot() {
 }
 
 function getServerSnapshot() {
-  return ETAT_INITIAL;
+  return etatCourant;
 }
 
 function setEtat(updater: (precedent: EtatPartie) => EtatPartie) {
@@ -137,7 +160,21 @@ function setEtat(updater: (precedent: EtatPartie) => EtatPartie) {
   emit();
 }
 
-export function GameProvider({ children }: { children: ReactNode }) {
+export function GameProvider({
+  joueur,
+  joueurs,
+  fightsInitiaux,
+  children,
+}: {
+  joueur: Player | null;
+  joueurs: Player[];
+  fightsInitiaux: Fight[];
+  children: ReactNode;
+}) {
+  // Amorçage avant le premier rendu, pour que useSyncExternalStore lise déjà
+  // les bonnes valeurs. initialiser() ne fait rien aux appels suivants.
+  initialiser(joueur, fightsInitiaux);
+
   const etat = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const enregistrerCombat = useCallback((entree: CombatAEnregistrer) => {
@@ -158,8 +195,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const valeur = useMemo(
-    () => ({ ...etat, enregistrerCombat }),
-    [etat, enregistrerCombat],
+    () => ({ ...etat, enregistrerCombat, joueur, joueurs }),
+    [etat, enregistrerCombat, joueur, joueurs],
   );
 
   return <GameContext.Provider value={valeur}>{children}</GameContext.Provider>;
@@ -173,26 +210,24 @@ export function useGame(): GameContextValue {
   return contexte;
 }
 
-/** Joueur connecté, avec le solde et le palmarès à jour. */
-export function useJoueur(): Player {
-  const { points, maxPoints, nbVictoires, nbCombats } = useGame();
+/**
+ * Joueur connecté, avec le solde et le palmarès à jour.
+ * Renvoie null quand personne n'est connecté.
+ */
+export function useJoueur(): Player | null {
+  const { joueur, points, maxPoints, nbVictoires, nbCombats } = useGame();
   return useMemo(
-    () => ({
-      ...currentPlayer,
-      points,
-      maxPoints,
-      nbVictoires,
-      nbCombats,
-    }),
-    [points, maxPoints, nbVictoires, nbCombats],
+    () => (joueur ? { ...joueur, points, maxPoints, nbVictoires, nbCombats } : null),
+    [joueur, points, maxPoints, nbVictoires, nbCombats],
   );
 }
 
 /** Tous les joueurs, le joueur courant ayant son score live. */
 export function useJoueurs(): Player[] {
+  const { joueurs } = useGame();
   const joueur = useJoueur();
   return useMemo(
-    () => players.map((player) => (player.id === joueur.id ? joueur : player)),
-    [joueur],
+    () => joueurs.map((player) => (joueur && player.id === joueur.id ? joueur : player)),
+    [joueurs, joueur],
   );
 }

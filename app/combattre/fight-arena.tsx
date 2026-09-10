@@ -17,7 +17,6 @@ import {
 } from "@/lib/fight-engine";
 import type { Cotes, Issue, ResultatCombat } from "@/lib/fight-engine";
 import { useGame } from "@/lib/game-store";
-import { combatants } from "@/lib/mock-data";
 import type { Combatant } from "@/lib/types";
 
 type Slot = "A" | "B";
@@ -41,8 +40,8 @@ const ETAPES = [
    L'enregistrement en base (§10) viendra plus tard.
    ========================================================================== */
 
-export function FightArena() {
-  const [fighterA, setFighterA] = useState<Combatant | null>(combatants[0]);
+export function FightArena({ combatants }: { combatants: Combatant[] }) {
+  const [fighterA, setFighterA] = useState<Combatant | null>(combatants[0] ?? null);
   const [fighterB, setFighterB] = useState<Combatant | null>(null);
   const [activeSlot, setActiveSlot] = useState<Slot>("B");
   const [bet, setBet] = useState<BetChoice | null>(null);

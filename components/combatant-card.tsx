@@ -7,7 +7,7 @@ import type { Combatant } from "@/lib/types";
 
 /**
  * Portrait encadré d'un objet. L'image vient de /public pour l'instant ;
- * elle pointera vers le CDN Vercel Blob une fois l'upload en place (§7).
+ * elle pointera vers Cloudinary pour les objets créés depuis le site (§7).
  */
 export function CombatantPortrait({
   combatant,
@@ -59,7 +59,7 @@ export function OverallBadge({ value }: { value: number }) {
  * Les stats sont repliées derrière un bouton (§4.3) via <details>, ce qui
  * fonctionne sans JavaScript et reste accessible au clavier.
  */
-export function CombatantCard({
+export function ObjectCard({
   combatant,
   priority = false,
 }: {

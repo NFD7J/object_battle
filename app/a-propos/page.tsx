@@ -14,7 +14,7 @@ const TECHNOS = [
   { titre: "Interface", detail: "Next.js (App Router), React et Tailwind CSS" },
   { titre: "Serveur", detail: "Routes API Next.js, Node.js" },
   { titre: "Base de données", detail: "PostgreSQL hébergé sur Neon" },
-  { titre: "Images", detail: "CDN Vercel Blob" },
+  { titre: "Images", detail: "CDN Cloudinary" },
   { titre: "Hébergement", detail: "Vercel" },
   { titre: "Versionnement", detail: "Git et GitHub" },
 ];

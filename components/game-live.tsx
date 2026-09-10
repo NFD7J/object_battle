@@ -5,18 +5,17 @@ import Link from "next/link";
 import { PlayerAvatar } from "@/components/ranking-table";
 import { Panel } from "@/components/ui";
 import { useGame, useJoueurs } from "@/lib/game-store";
-import { combatants, players } from "@/lib/mock-data";
 
 /** Compteurs de la bannière d'accueil, avec le nombre de combats à jour. */
-export function HeroStats() {
-  const { fights } = useGame();
+export function HeroStats({ nbObjets }: { nbObjets: number }) {
+  const { fights, joueurs } = useGame();
 
   return (
     <dl className="mt-10 grid max-w-lg grid-cols-3 gap-3">
       {[
-        { valeur: combatants.length, label: "Objets" },
+        { valeur: nbObjets, label: "Objets" },
         { valeur: fights.length, label: "Combats" },
-        { valeur: players.length, label: "Joueurs" },
+        { valeur: joueurs.length, label: "Joueurs" },
       ].map((item) => (
         <div
           key={item.label}
