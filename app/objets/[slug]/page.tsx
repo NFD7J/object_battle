@@ -6,9 +6,7 @@ import { CombatantPortrait, OverallBadge } from "@/components/object-card";
 import { HistoryList } from "@/components/history-list";
 import { StatList } from "@/components/stat-bar";
 import { Panel, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
-import { getCurrentPlayer } from "@/lib/auth";
-import type { Object, Fight } from "@/lib/types";
-import { getObjectBySlug, getObjectSlugs } from "@/lib/queries";
+import { getObjectBySlug, getObjectSlugs, getFightsByObject } from "@/lib/queries";
 import { STAT_HINTS, STAT_KEYS, STAT_LABELS } from "@/lib/types";
 
 /** Une page statique par objet : URL propre du type /objets/marteau (§15). */
@@ -21,23 +19,24 @@ export async function generateMetadata(
   props: PageProps<"/objets/[slug]">,
 ): Promise<Metadata> {
   const { slug } = await props.params;
-  const combatant = await getObjectBySlug(slug);
+  const object = await getObjectBySlug(slug);
 
-  if (!combatant) {
+  if (!object) {
     return { title: "Objet introuvable" };
   }
 
   return {
-    title: combatant.name,
-    description: `${combatant.name} : ${combatant.description} Score global ${combatant.overall}, ${combatant.nbWins} victoires et ${combatant.nbLosses} défaites.`,
+    title: object.name,
+    description: `${object.name} : ${object.description} Score global ${object.overall}, ${object.nbWins} victoires et ${object.nbLosses} défaites.`,
   };
 }
 
 export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">) {
   const { slug } = await props.params;
-  const combatant = await getObjectBySlug(slug);
+  const object = await getObjectBySlug(slug);
+  const combats = object ? await getFightsByObject(object.id) : [];
 
-  if (!combatant) {
+  if (!object) {
     notFound();
   }
 
@@ -73,7 +72,7 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
                 /
               </li>
               <li className="text-arcade-cyan" aria-current="page">
-                {combatant.name}
+                {object.name}
               </li>
             </ol>
           </nav>
@@ -81,7 +80,7 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
           <div className="grid gap-8 md:grid-cols-[300px_1fr] md:items-start">
             <Panel tone="violet" innerClassName="p-4">
               <CombatantPortrait
-                combatant={combatant}
+                combatant={object}
                 className="cut-corner-sm aspect-square w-full"
                 sizes="(min-width: 768px) 300px, 90vw"
                 priority
@@ -91,15 +90,14 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
             <div>
               <div className="flex flex-wrap items-center gap-3">
                 <Tag className="bg-arcade-violet/20 text-arcade-cyan">Fiche objet</Tag>
-                <OverallBadge value={combatant.overall} />
               </div>
 
               <h1 className="skew-title mt-4 text-5xl leading-none sm:text-6xl">
-                {combatant.name}
+                {object.name}
               </h1>
 
               <p className="mt-4 max-w-2xl leading-relaxed text-white/70">
-                {combatant.description}
+                {object.description}
               </p>
 
               <dl className="mt-6 grid max-w-md grid-cols-3 gap-3">
@@ -108,7 +106,7 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
                     Victoires
                   </dt>
                   <dd className="font-display text-2xl text-victory tabular-nums">
-                    {combatant.nbWins}
+                    {object.nbWins}
                   </dd>
                 </div>
                 <div className="cut-corner-sm border border-edge bg-panel px-4 py-3">
@@ -116,7 +114,7 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
                     Défaites
                   </dt>
                   <dd className="font-display text-2xl text-defeat tabular-nums">
-                    {combatant.nbLosses}
+                    {object.nbLosses}
                   </dd>
                 </div>
                 <div className="cut-corner-sm border border-edge bg-panel px-4 py-3">
@@ -124,7 +122,7 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
                     Combats
                   </dt>
                   <dd className="font-display text-2xl text-white tabular-nums">
-                    {combatant.nbWins + combatant.nbLosses}
+                    {object.nbWins + object.nbLosses}
                   </dd>
                 </div>
               </dl>
@@ -152,7 +150,7 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
 
         <div className="grid gap-4 lg:grid-cols-2">
           <Panel innerClassName="p-6">
-            <StatList stats={combatant.stats} />
+            <StatList stats={object.stats} />
             <p className="mt-6 border-t border-edge pt-4 font-mono text-xs text-white/45">
               Chaque caractéristique est notée de 0 à 100.
             </p>
@@ -180,12 +178,12 @@ export default async function FicheObjetPage(props: PageProps<"/objets/[slug]">)
       <section className="border-y border-edge bg-abyss">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
           <SectionTitle href="/historique" linkLabel="Tout l'historique">
-            Derniers combats de {combatant.name}
+            Derniers combats de {object.name}
           </SectionTitle>
 
           <HistoryList
             compact
-            combatantId={combatant.id}
+            combatantId={object.id}
             filtres={false}
             fights={combats}
             emptyTitle="Aucun combat ici"

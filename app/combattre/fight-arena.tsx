@@ -2,23 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { CombatantPortrait, OverallBadge } from "@/components/object-card";
 import { HealthBar } from "@/components/health-bar";
 import { StatList } from "@/components/stat-bar";
 import { Panel, Tag, btn, btnLabel } from "@/components/ui";
-import {
-  PV_MAX,
-  calculerCotes,
-  deltaParis,
-  formatCote,
-  gainPotentiel,
-  resoudreCombat,
-} from "@/lib/fight-engine";
+import { PV_MAX, deltaParis, formatCote, gainPotentiel } from "@/lib/fight-engine";
 import type { Cotes, Issue, ResultatCombat } from "@/lib/fight-engine";
 import { useGame } from "@/lib/game-store";
-import type { Object } from "@/lib/types";
+import type { Object, Fight, Player } from "@/lib/types";
 
 type Slot = "A" | "B";
 type BetChoice = Issue;
@@ -26,16 +19,17 @@ type Phase = "selection" | "resultat";
 
 const MISES = [10, 25, 50, 100];
 
-const ETAPES = [
-  "Combattant 1",
-  "Combattant 2",
-  "Pari",
-  "Combat",
-];
+/** Étapes du fil d'Ariane. Un visiteur ne parie pas : il en a une de moins. */
+const ETAPES_JOUEUR = ["Combattant 1", "Combattant 2", "Pari", "Combat"];
+const ETAPES_VISITEUR = ["Combattant 1", "Combattant 2", "Combat"];
+
+type ReponseCotes = {
+  cotes?: Cotes;
+};
 
 type ReponseCombat = {
   combat?: Fight;
-  joueur?: Player;
+  joueur?: Player | null;
   error?: { message?: string };
 };
 
@@ -48,11 +42,15 @@ function resultatDepuisCombat(combat: Fight, fighterA: Object): ResultatCombat {
 /* ==========================================================================
    Écran « Combattre » — sélection, pari, résultat.
 
-   Invité : l'issue est tirée au sort localement (données d'exemple).
-   Compte : le serveur calcule le combat et l'enregistre.
+   Tous les combats sont calculés et enregistrés par le serveur, connecté ou
+   non : l'historique est commun. Seul le pari distingue les deux publics —
+   il demande un compte et des points à engager.
    ========================================================================== */
 
 export function FightArena({ combatants }: { combatants: Object[] }) {
+  const router = useRouter();
+  const { points, connecte, appliquerCombatServeur } = useGame();
+
   const [fighterA, setFighterA] = useState<Object | null>(combatants[0] ?? null);
   const [fighterB, setFighterB] = useState<Object | null>(null);
   const [activeSlot, setActiveSlot] = useState<Slot>("B");
@@ -65,40 +63,67 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
   const [enCours, setEnCours] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
 
-  const cotes = useMemo(() => {
-    if (!fighterA || !fighterB) return null;
-    if (connecte) {
-      return { A: COTE_OBJET, B: COTE_OBJET, nul: COTE_NUL } satisfies Cotes;
-    }
-    return calculerCotes(fighterA, fighterB);
-  }, [connecte, fighterA, fighterB]);
+  // Les cotes sont mémorisées avec la paire à laquelle elles appartiennent.
+  const [cotesRecues, setCotesRecues] = useState<{
+    idA: number;
+    idB: number;
+    cotes: Cotes;
+  } | null>(null);
+
+  // On dépend des identifiants, pas des objets : router.refresh() renouvelle
+  // les objets reçus en props sans que la paire ait changé, ce qui relancerait
+  // la requête pour rien.
+  const idA = fighterA?.id ?? null;
+  const idB = fighterB?.id ?? null;
+
+  // Les cotes reçues ne valent que pour la paire qui les a demandées : dès que
+  // la sélection change, elles cessent d'être affichées sans qu'on ait à les
+  // effacer. Les boutons de pari se désactivent seuls tant que c'est null.
+  const cotes =
+    cotesRecues && cotesRecues.idA === idA && cotesRecues.idB === idB
+      ? cotesRecues.cotes
+      : null;
+
+  /*
+   * Les cotes viennent du serveur, qui les obtient en simulant 500 combats à
+   * la première rencontre de la paire puis les garde en base. Les recalculer
+   * ici annoncerait un gain que le serveur ne paierait pas — c'est la même
+   * ligne de la table qui sert à l'affichage et au paiement du pari.
+   */
+  useEffect(() => {
+    if (idA === null || idB === null) return;
+
+    const controleur = new AbortController();
+
+    fetch(`/api/cotes?a=${idA}&b=${idB}`, { signal: controleur.signal })
+      .then((reponse) => (reponse.ok ? reponse.json() : Promise.reject(new Error())))
+      .then((donnees: ReponseCotes) => {
+        if (donnees.cotes) setCotesRecues({ idA, idB, cotes: donnees.cotes });
+      })
+      .catch(() => {
+        // Sélection changée entre-temps (requête annulée) ou serveur muet :
+        // on laisse « — » à l'écran plutôt qu'une cote fausse.
+      });
+
+    return () => controleur.abort();
+  }, [idA, idB]);
 
   const miseAbordable =
     mise <= points ? mise : ([...MISES].reverse().find((montant) => montant <= points) ?? mise);
 
+  // Un visiteur n'a que deux combattants à choisir ; un joueur doit en plus
+  // avoir posé un pari qu'il peut couvrir.
   const pretAuCombat =
-    fighterA !== null && fighterB !== null && bet !== null && miseAbordable <= points && !enCours;
+    fighterA !== null &&
+    fighterB !== null &&
+    !enCours &&
+    (!connecte || (bet !== null && miseAbordable <= points));
 
-  const etapeCourante = !fighterA ? 0 : !fighterB ? 1 : !bet ? 2 : 3;
+  const etapes = connecte ? ETAPES_JOUEUR : ETAPES_VISITEUR;
+  const etapeCourante = !fighterA ? 0 : !fighterB ? 1 : connecte && !bet ? 2 : etapes.length - 1;
 
   async function lancerLeCombat() {
-    if (!fighterA || !fighterB || !bet || !cotes || miseAbordable > points) return;
-
-    if (!connecte) {
-      const tirage = resoudreCombat();
-      setSoldeAvant(points);
-      enregistrerCombat({
-        fighterA,
-        fighterB,
-        resultat: tirage,
-        bet,
-        mise: miseAbordable,
-        cote: cotes[bet],
-      });
-      setResultat(tirage);
-      setPhase("resultat");
-      return;
-    }
+    if (!pretAuCombat || !fighterA || !fighterB) return;
 
     setErreur(null);
     setEnCours(true);
@@ -111,30 +136,26 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
         body: JSON.stringify({
           object1Id: fighterA.id,
           object2Id: fighterB.id,
-          betOn: bet === "nul" ? "nul" : bet === "A" ? fighterA.id : fighterB.id,
-          amount: miseAbordable,
+          // Un visiteur n'envoie aucune mise : le serveur enregistre quand
+          // même le combat, qui rejoint l'historique commun.
+          ...(connecte && bet
+            ? {
+                betOn: bet === "nul" ? "nul" : bet === "A" ? fighterA.id : fighterB.id,
+                amount: miseAbordable,
+              }
+            : {}),
         }),
       });
 
       const donnees: ReponseCombat = await reponse.json();
 
-      if (!reponse.ok || !donnees.combat || !donnees.joueur) {
+      if (!reponse.ok || !donnees.combat) {
         throw new Error(donnees.error?.message ?? "Le combat n'a pas pu être lancé.");
       }
 
-      const [objetsRes, classementRes] = await Promise.all([
-        fetch("/api/objets"),
-        fetch("/api/classement"),
-      ]);
-      const objetsJson: { objets?: Combatant[] } = await objetsRes.json();
-      const classementJson: { joueurs?: Player[] } = await classementRes.json();
-
-      appliquerCombatServeur(
-        donnees.combat,
-        donnees.joueur,
-        objetsJson.objets,
-        classementJson.joueurs,
-      );
+      // Affichage immédiat ; router.refresh() ramène ensuite les données
+      // serveur (bilans des objets, classement) qui font foi.
+      appliquerCombatServeur(donnees.combat, donnees.joueur ?? null);
       setResultat(resultatDepuisCombat(donnees.combat, fighterA));
       setPhase("resultat");
       router.refresh();
@@ -147,7 +168,7 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
     }
   }
 
-  function choisir(combatant: Combatant) {
+  function choisir(combatant: Object) {
     if (activeSlot === "A") {
       setFighterA(combatant);
       if (!fighterB) setActiveSlot("B");
@@ -183,8 +204,12 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
       {/* ---------------------------------------------------------------- */}
       {/* Fil des étapes                                                    */}
       {/* ---------------------------------------------------------------- */}
-      <ol className="mb-10 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {ETAPES.map((etape, index) => {
+      <ol
+        className={`mb-10 grid grid-cols-2 gap-2 ${
+          connecte ? "sm:grid-cols-4" : "sm:grid-cols-3"
+        }`}
+      >
+        {etapes.map((etape, index) => {
           const faite = index < etapeCourante;
           const active = index === etapeCourante;
           return (
@@ -352,9 +377,6 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
                           <span className="truncate font-display text-lg text-white">
                             {combatant.name}
                           </span>
-                          <span className="font-mono text-sm font-bold text-arcade-gold tabular-nums">
-                            {combatant.overall}
-                          </span>
                         </span>
                         <span className="mt-1 block font-mono text-[10px] tracking-widest text-white/40 uppercase">
                           {dejaEnLice ? "Sur le ring" : "Sélectionner"}
@@ -374,112 +396,138 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
             <h2 id="titre-pari" className="text-2xl sm:text-3xl">
               Placer son pari
             </h2>
-            <p className="mt-1 text-sm text-white/60">
-              Vous disposez de{" "}
-              <strong className="font-mono text-arcade-gold" suppressHydrationWarning>
-                {points.toLocaleString("fr-FR")}
-              </strong>{" "}
-              points.
-            </p>
 
-            <Panel className="mt-5" innerClassName="p-5 sm:p-6">
-              <fieldset>
-                <legend className="font-mono text-xs tracking-[0.16em] text-arcade-cyan uppercase">
-                  Sur qui misez-vous ?
-                </legend>
+            {!connecte ? (
+              // Seule chose interdite au visiteur. Le combat, lui, reste
+              // accessible juste en dessous et rejoindra l'historique.
+              <Panel className="mt-5" innerClassName="p-6 text-center sm:p-8">
+                <p className="font-mono text-xs tracking-[0.16em] text-arcade-cyan uppercase">
+                  Réservé aux joueurs inscrits
+                </p>
+                <p className="mx-auto mt-3 max-w-md text-sm text-white/70">
+                  Créez un compte pour recevoir des points, miser sur une issue et
+                  grimper au classement. Sans compte, le combat reste ouvert : il
+                  sera enregistré dans l&apos;historique, simplement sans mise.
+                </p>
+                <div className="mt-6 flex flex-wrap justify-center gap-3">
+                  <Link href="/inscription" className={`${btn.base} ${btn.primary}`}>
+                    <span className={btnLabel}>Créer un compte</span>
+                  </Link>
+                  <Link href="/connexion" className={`${btn.base} ${btn.ghost}`}>
+                    <span className={btnLabel}>Se connecter</span>
+                  </Link>
+                </div>
+              </Panel>
+            ) : (
+              <>
                 <p className="mt-1 text-sm text-white/60">
-                  La cote dépend du niveau des deux objets : miser sur
-                  l&apos;outsider rapporte plus gros.
+                  Vous disposez de{" "}
+                  <strong className="font-mono text-arcade-gold" suppressHydrationWarning>
+                    {points.toLocaleString("fr-FR")}
+                  </strong>{" "}
+                  points.
                 </p>
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  {([
-                    { choix: "A" as BetChoice, label: fighterA?.name ?? "Combattant A", couleur: "border-arcade-violet" },
-                    { choix: "nul" as BetChoice, label: "Match nul", couleur: "border-draw" },
-                    { choix: "B" as BetChoice, label: fighterB?.name ?? "Combattant B", couleur: "border-arcade-blue" },
-                  ]).map((option) => {
-                    const indisponible = !cotes;
-                    const choisi = bet === option.choix;
-                    const cote = cotes?.[option.choix];
-                    return (
-                      <button
-                        key={option.choix}
-                        type="button"
-                        disabled={indisponible}
-                        onClick={() => setBet(option.choix)}
-                        aria-pressed={choisi}
-                        className={`cut-corner-sm border-2 px-4 py-4 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                          choisi
-                            ? `${option.couleur} bg-panel-soft`
-                            : "border-edge bg-panel hover:border-white/40"
-                        }`}
-                      >
-                        <span className="block font-display text-xl text-white">
-                          {option.label}
-                        </span>
-                        <span className="mt-2 block font-mono text-2xl leading-none font-bold text-arcade-gold tabular-nums">
-                          {cote ? formatCote(cote) : "—"}
-                          <span className="sr-only"> de cote</span>
-                        </span>
-                        <span className="mt-2 block font-mono text-[10px] tracking-widest uppercase">
-                          {choisi ? (
-                            <span className="text-arcade-cyan">✓ Pari retenu</span>
-                          ) : (
-                            <span className="text-white/40">Choisir</span>
-                          )}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </fieldset>
 
-              <fieldset className="mt-7 border-t border-edge pt-6">
-                <legend className="font-mono text-xs tracking-[0.16em] text-arcade-cyan uppercase">
-                  Montant de la mise
-                </legend>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {MISES.map((montant) => {
-                    const tropCher = montant > points;
-                    return (
-                      <button
-                        key={montant}
-                        type="button"
-                        disabled={tropCher}
-                        onClick={() => setMise(montant)}
-                        aria-pressed={miseAbordable === montant}
-                        className={`tag-slant px-5 py-2.5 font-mono text-sm font-bold tabular-nums disabled:cursor-not-allowed disabled:opacity-35 ${
-                          miseAbordable === montant && !tropCher
-                            ? "bg-arcade-gold text-void"
-                            : "bg-panel-soft text-white/70 hover:text-white"
-                        }`}
-                      >
-                        {montant} pts
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* Récapitulatif mise × cote, mis à jour à chaque changement */}
-                <p
-                  aria-live="polite"
-                  className="mt-5 flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-xs text-white/50"
-                >
-                  {bet && cotes ? (
-                    <>
-                      <span>
-                        {miseAbordable} pts × {formatCote(cotes[bet])} =
-                      </span>
-                      <strong className="font-display text-2xl leading-none text-victory tabular-nums">
-                        +{gainPotentiel(miseAbordable, cotes[bet])} pts
-                      </strong>
-                      <span>en cas de bon pronostic.</span>
-                    </>
-                  ) : (
-                    <span>Choisissez une issue pour voir le gain potentiel.</span>
-                  )}
-                </p>
-              </fieldset>
-            </Panel>
+              <Panel className="mt-5" innerClassName="p-5 sm:p-6">
+                <fieldset>
+                  <legend className="font-mono text-xs tracking-[0.16em] text-arcade-cyan uppercase">
+                    Sur qui misez-vous ?
+                  </legend>
+                  <p className="mt-1 text-sm text-white/60">
+                    La cote dépend du niveau des deux objets : miser sur
+                    l&apos;outsider rapporte plus gros.
+                  </p>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    {([
+                      { choix: "A" as BetChoice, label: fighterA?.name ?? "Combattant A", couleur: "border-arcade-violet" },
+                      { choix: "nul" as BetChoice, label: "Match nul", couleur: "border-draw" },
+                      { choix: "B" as BetChoice, label: fighterB?.name ?? "Combattant B", couleur: "border-arcade-blue" },
+                    ]).map((option) => {
+                      const indisponible = !cotes;
+                      const choisi = bet === option.choix;
+                      const cote = cotes?.[option.choix];
+                      return (
+                        <button
+                          key={option.choix}
+                          type="button"
+                          disabled={indisponible}
+                          onClick={() => setBet(option.choix)}
+                          aria-pressed={choisi}
+                          className={`cut-corner-sm border-2 px-4 py-4 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                            choisi
+                              ? `${option.couleur} bg-panel-soft`
+                              : "border-edge bg-panel hover:border-white/40"
+                          }`}
+                        >
+                          <span className="block font-display text-xl text-white">
+                            {option.label}
+                          </span>
+                          <span className="mt-2 block font-mono text-2xl leading-none font-bold text-arcade-gold tabular-nums">
+                            {cote ? formatCote(cote) : "—"}
+                            <span className="sr-only"> de cote</span>
+                          </span>
+                          <span className="mt-2 block font-mono text-[10px] tracking-widest uppercase">
+                            {choisi ? (
+                              <span className="text-arcade-cyan">✓ Pari retenu</span>
+                            ) : (
+                              <span className="text-white/40">Choisir</span>
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+  
+                <fieldset className="mt-7 border-t border-edge pt-6">
+                  <legend className="font-mono text-xs tracking-[0.16em] text-arcade-cyan uppercase">
+                    Montant de la mise
+                  </legend>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {MISES.map((montant) => {
+                      const tropCher = montant > points;
+                      return (
+                        <button
+                          key={montant}
+                          type="button"
+                          disabled={tropCher}
+                          onClick={() => setMise(montant)}
+                          aria-pressed={miseAbordable === montant}
+                          className={`tag-slant px-5 py-2.5 font-mono text-sm font-bold tabular-nums disabled:cursor-not-allowed disabled:opacity-35 ${
+                            miseAbordable === montant && !tropCher
+                              ? "bg-arcade-gold text-void"
+                              : "bg-panel-soft text-white/70 hover:text-white"
+                          }`}
+                        >
+                          {montant} pts
+                        </button>
+                      );
+                    })}
+                  </div>
+  
+                  {/* Récapitulatif mise × cote, mis à jour à chaque changement */}
+                  <p
+                    aria-live="polite"
+                    className="mt-5 flex flex-wrap items-baseline gap-x-2 gap-y-1 font-mono text-xs text-white/50"
+                  >
+                    {bet && cotes ? (
+                      <>
+                        <span>
+                          {miseAbordable} pts × {formatCote(cotes[bet])} =
+                        </span>
+                        <strong className="font-display text-2xl leading-none text-victory tabular-nums">
+                          +{gainPotentiel(miseAbordable, cotes[bet])} pts
+                        </strong>
+                        <span>en cas de bon pronostic.</span>
+                      </>
+                    ) : (
+                      <span>Choisissez une issue pour voir le gain potentiel.</span>
+                    )}
+                  </p>
+                </fieldset>
+              </Panel>
+              </>
+            )}
           </section>
 
           {/* -------------------------------------------------------------- */}
@@ -500,13 +548,17 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
               </p>
             ) : null}
             <p className="mt-3 font-mono text-xs text-white/45" aria-live="polite">
-              {points < Math.min(...MISES)
-                ? "Plus assez de points pour miser. Les prochains paris devront attendre."
-                : miseAbordable > points
-                  ? `Mise trop élevée : il vous reste ${points.toLocaleString("fr-FR")} points.`
-                  : pretAuCombat && cotes
-                    ? `Mise de ${miseAbordable} points engagée à la cote ${formatCote(cotes[bet!])}. L'issue est tirée au sort.`
-                    : "Sélectionnez deux objets et placez votre pari pour lancer le combat."}
+              {!connecte
+                ? pretAuCombat
+                  ? "Combat amical : le résultat rejoindra l'historique, sans mise."
+                  : "Sélectionnez deux objets pour lancer le combat."
+                : points < Math.min(...MISES)
+                  ? "Plus assez de points pour miser. Les prochains paris devront attendre."
+                  : miseAbordable > points
+                    ? `Mise trop élevée : il vous reste ${points.toLocaleString("fr-FR")} points.`
+                    : pretAuCombat && cotes && bet
+                      ? `Mise de ${miseAbordable} points engagée à la cote ${formatCote(cotes[bet])}. L'issue est tirée au sort.`
+                      : "Sélectionnez deux objets et placez votre pari pour lancer le combat."}
             </p>
           </div>
         </>
@@ -514,11 +566,17 @@ export function FightArena({ combatants }: { combatants: Object[] }) {
         <FightResult
           fighterA={fighterA!}
           fighterB={fighterB!}
-          bet={bet!}
-          mise={miseAbordable}
-          cotes={cotes!}
           resultat={resultat!}
-          soldeAvant={soldeAvant ?? points}
+          pari={
+            connecte && bet && cotes
+              ? {
+                  bet,
+                  mise: miseAbordable,
+                  cote: cotes[bet],
+                  soldeAvant: soldeAvant ?? points,
+                }
+              : null
+          }
           onRejouer={reinitialiser}
         />
       )}
@@ -543,7 +601,7 @@ function FighterSlot({
   onClear,
 }: {
   slot: Slot;
-  combatant: Combatant | null;
+  combatant: Object | null;
   active: boolean;
   attacking: boolean;
   pv: number;
@@ -587,7 +645,6 @@ function FighterSlot({
         className={`flex items-center justify-between gap-2 ${mirrored ? "flex-row-reverse" : ""}`}
       >
         <Tag className={`bg-panel-soft ${accent}`}>Combattant {slot}</Tag>
-        <OverallBadge value={combatant.overall} />
       </div>
 
       <div
@@ -647,32 +704,34 @@ function FighterSlot({
    Écran de résultat
    -------------------------------------------------------------------------- */
 
+/** Pari réellement engagé sur le combat qui vient de se jouer. */
+type PariEngage = {
+  bet: BetChoice;
+  mise: number;
+  cote: number;
+  soldeAvant: number;
+};
+
 function FightResult({
   fighterA,
   fighterB,
-  bet,
-  mise,
-  cotes,
   resultat,
-  soldeAvant,
+  pari,
   onRejouer,
 }: {
-  fighterA: Combatant;
-  fighterB: Combatant;
-  bet: BetChoice;
-  mise: number;
-  cotes: Cotes;
+  fighterA: Object;
+  fighterB: Object;
   resultat: ResultatCombat;
-  soldeAvant: number;
+  /** `null` quand le combat a été lancé sans mise, par un visiteur notamment. */
+  pari: PariEngage | null;
   onRejouer: () => void;
 }) {
-  // Le vainqueur a été tiré au sort au lancement du combat ; les PV restants
-  // sont affichés par les barres de vie de l'arène, juste au-dessus.
+  // Le vainqueur a été désigné par le serveur ; les PV restants sont affichés
+  // par les barres de vie de l'arène, juste au-dessus.
   const { vainqueur } = resultat;
-  const cote = cotes[bet];
-  const pariGagnant = bet === vainqueur;
-  const delta = deltaParis(mise, cote, pariGagnant);
-  const soldeApres = Math.max(0, soldeAvant + delta);
+  const pariGagnant = pari !== null && pari.bet === vainqueur;
+  const delta = pari ? deltaParis(pari.mise, pari.cote, pariGagnant) : 0;
+  const soldeApres = pari ? Math.max(0, pari.soldeAvant + delta) : 0;
 
   const nomVainqueur =
     vainqueur === "nul" ? null : vainqueur === "A" ? fighterA.name : fighterB.name;
@@ -684,7 +743,10 @@ function FightResult({
       </h2>
 
       {/* Bandeau du vainqueur */}
-      <Panel tone={pariGagnant ? "victory" : "defeat"} innerClassName="relative overflow-hidden">
+      <Panel
+        tone={pari ? (pariGagnant ? "victory" : "defeat") : "violet"}
+        innerClassName="relative overflow-hidden"
+      >
         <div aria-hidden="true" className="arena-grid absolute inset-0 opacity-40" />
         <div className="relative px-6 py-8 text-center">
           <p className="font-mono text-xs tracking-[0.3em] text-white/60 uppercase">
@@ -699,35 +761,49 @@ function FightResult({
           </p>
 
           {/* Gain ou perte : icône + mot + montant, jamais la couleur seule */}
-          <p
-            className="mt-7 inline-flex -skew-x-6 items-center gap-3 border-2 px-5 py-3"
-            style={{
-              borderColor: pariGagnant ? "var(--color-victory)" : "var(--color-defeat)",
-            }}
-          >
-            <span aria-hidden="true" className="skew-x-6 text-lg">
-              {pariGagnant ? "▲" : "▼"}
-            </span>
-            <span className="skew-x-6 font-mono text-xs tracking-[0.16em] uppercase">
-              {pariGagnant ? "Pari gagné" : "Pari perdu"}
-            </span>
-            <span
-              className={`skew-x-6 font-display text-2xl leading-none tabular-nums ${
-                pariGagnant ? "text-victory" : "text-defeat"
-              }`}
-            >
-              {delta > 0 ? `+${delta}` : delta} pts
-            </span>
-          </p>
-          <p className="mt-3 font-mono text-xs text-white/50">
-            Mise de {mise} pts à la cote {formatCote(cote)}.
-          </p>
-          <p className="mt-2 font-mono text-sm text-white/70 tabular-nums" aria-live="polite">
-            Solde : {soldeAvant.toLocaleString("fr-FR")} →{" "}
-            <strong className={pariGagnant ? "text-victory" : "text-defeat"}>
-              {soldeApres.toLocaleString("fr-FR")} pts
-            </strong>
-          </p>
+          {pari ? (
+            <>
+              <p
+                className="mt-7 inline-flex -skew-x-6 items-center gap-3 border-2 px-5 py-3"
+                style={{
+                  borderColor: pariGagnant ? "var(--color-victory)" : "var(--color-defeat)",
+                }}
+              >
+                <span aria-hidden="true" className="skew-x-6 text-lg">
+                  {pariGagnant ? "▲" : "▼"}
+                </span>
+                <span className="skew-x-6 font-mono text-xs tracking-[0.16em] uppercase">
+                  {pariGagnant ? "Pari gagné" : "Pari perdu"}
+                </span>
+                <span
+                  className={`skew-x-6 font-display text-2xl leading-none tabular-nums ${
+                    pariGagnant ? "text-victory" : "text-defeat"
+                  }`}
+                >
+                  {delta > 0 ? `+${delta}` : delta} pts
+                </span>
+              </p>
+              <p className="mt-3 font-mono text-xs text-white/50">
+                Mise de {pari.mise} pts à la cote {formatCote(pari.cote)}.
+              </p>
+              <p
+                className="mt-2 font-mono text-sm text-white/70 tabular-nums"
+                aria-live="polite"
+              >
+                Solde : {pari.soldeAvant.toLocaleString("fr-FR")} →{" "}
+                <strong className={pariGagnant ? "text-victory" : "text-defeat"}>
+                  {soldeApres.toLocaleString("fr-FR")} pts
+                </strong>
+              </p>
+            </>
+          ) : (
+            // Combat d'un visiteur : pas de mise, mais le combat est bien
+            // enregistré et figure dès maintenant dans l'historique.
+            <p className="mx-auto mt-7 max-w-md text-sm text-white/60">
+              Combat enregistré dans l&apos;historique. Créez un compte pour miser
+              des points sur vos pronostics et entrer au classement.
+            </p>
+          )}
         </div>
       </Panel>
 

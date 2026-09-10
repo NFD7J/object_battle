@@ -5,16 +5,33 @@ import { HealthBar } from "@/components/health-bar";
 import { Panel, Tag } from "@/components/ui";
 import { formatCote } from "@/lib/fight-engine";
 import { formatFightDate } from "@/lib/format";
-import type { Combatant, Fight } from "@/lib/types";
+import type { Object, Fight } from "@/lib/types";
 
 /** Le camp gagnant, ou null en cas de match nul. */
-function winnerOf(fight: Fight): Combatant | null {
+function winnerOf(fight: Fight): Object | null {
   if (fight.winnerId === null) return null;
   return fight.winnerId === fight.fighterA.id ? fight.fighterA : fight.fighterB;
 }
 
 /** Bandeau de gain ou de perte : couleur + flèche + mot, jamais la couleur seule. */
 export function BetResult({ fight }: { fight: Fight }) {
+  // Combat lancé sans pari : c'est le cas de tous ceux d'un visiteur.
+  if (!fight.bet) {
+    return (
+      <div className="flex flex-col items-start gap-1.5 sm:items-end">
+        <span className="flex -skew-x-6 items-center gap-2 bg-panel-soft px-3 py-1.5 text-white/50">
+          <span aria-hidden="true" className="skew-x-6 text-xs">
+            &#9671;
+          </span>
+          <span className="skew-x-6 font-mono text-xs tracking-wider uppercase">
+            Sans pari
+          </span>
+        </span>
+        <span className="font-mono text-[11px] text-white/40">Combat amical</span>
+      </div>
+    );
+  }
+
   const { outcome, delta, amount, cote } = fight.bet;
 
   const styles = {

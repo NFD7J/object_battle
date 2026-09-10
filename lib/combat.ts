@@ -1,4 +1,6 @@
-import type { Combatant } from "@/lib/types";
+import { enCote } from "@/lib/fight-engine";
+import type { Cotes } from "@/lib/fight-engine";
+import type { Object } from "@/lib/types";
 
 /* ===========================================================================
    Moteur de combat (§9)
@@ -17,18 +19,12 @@ import type { Combatant } from "@/lib/types";
    =========================================================================== */
 
 export const PONDERATIONS = {
-  puissance: 0.15,
-  resistance: 0.1,
-  rapidite: 0.08,
-  intelligence: 0.12,
-  aleatoire: 0.55,
+  puissance: 1.20,
+  resistance: 1.10,
+  rapidite: 1.05,
+  intelligence: 1.15,
+  aleatoire: 1.50,
 } as const;
-
-/** Multiplicateur de gain quand on a parié sur le bon objet. */
-export const COTE_OBJET = 2;
-
-/** Multiplicateur de gain sur un match nul, plus rare donc mieux payé. */
-export const COTE_NUL = 3;
 
 export type FightOutcome = {
   scoreA: number;
@@ -38,7 +34,7 @@ export type FightOutcome = {
 };
 
 /** Score d'un objet sur ce combat : 0 à 100, arrondi. */
-function scoreDe(combatant: Combatant): number {
+function scoreDe(combatant: Object): number {
   const { puissance, resistance, rapidite, intelligence } = combatant.stats;
   const aleatoire = Math.random() * 100;
 
@@ -53,32 +49,100 @@ function scoreDe(combatant: Combatant): number {
 }
 
 /** Fait s'affronter deux objets et désigne le vainqueur. */
-export function resolveFight(a: Combatant, b: Combatant): FightOutcome {
+export function resolveFight(a: Object, b: Object): FightOutcome {
   const scoreA = scoreDe(a);
   const scoreB = scoreDe(b);
 
   return {
     scoreA,
     scoreB,
-    winnerId: scoreA === scoreB ? null : scoreA > scoreB ? a.id : b.id,
+    winnerId: (scoreA < scoreB + 5 && scoreA > scoreB - 5) ? null : scoreA > scoreB ? a.id : b.id,
+  };
+}
+
+/* ===========================================================================
+   Cotes par simulation (méthode de Monte-Carlo)
+
+   Plutôt que de deviner la force d'un objet par une formule, on fait
+   simplement combattre la paire NB_SIMULATIONS fois à blanc et on compte les
+   résultats. La fréquence observée sert de probabilité, convertie en cote par
+   enCote() — la marge de la maison et les bornes vivent dans fight-engine.ts.
+
+   L'avantage : les cotes suivent automatiquement le moteur. Si resolveFight
+   change (pondérations, fenêtre du match nul), les cotes suivent sans qu'on
+   ait à retoucher une formule en parallèle.
+
+   Le coût : 500 combats par paire, soit ~1000 appels à Math.random(). C'est
+   négligeable une fois, mais assez pour ne pas vouloir le refaire à chaque
+   affichage — d'où l'enregistrement en base (voir getPairOdds dans
+   lib/queries.ts).
+   =========================================================================== */
+
+/** Nombre de combats joués à blanc pour estimer les probabilités d'une paire. */
+export const NB_SIMULATIONS = 500;
+
+/** Résultat brut d'une campagne de simulation, cotes et comptages. */
+export type SimulationPaire = {
+  cotes: Cotes;
+  /** Nombre de simulations remportées par le premier objet. */
+  victoiresA: number;
+  victoiresB: number;
+  nuls: number;
+  nbSimulations: number;
+};
+
+/**
+ * Estime les cotes d'une paire en rejouant son combat NB_SIMULATIONS fois.
+ *
+ * Les trois cotes ne dépendent pas de l'ordre des arguments : scoreDe() note
+ * chaque objet isolément, sans savoir qui est en face. C'est ce qui permet de
+ * n'enregistrer qu'une ligne par paire, quel que soit le sens.
+ */
+export function simulerCotes(a: Object, b: Object): SimulationPaire {
+  let victoiresA = 0;
+  let victoiresB = 0;
+  let nuls = 0;
+
+  for (let i = 0; i < NB_SIMULATIONS; i += 1) {
+    const { winnerId } = resolveFight(a, b);
+
+    if (winnerId === null) nuls += 1;
+    else if (winnerId === a.id) victoiresA += 1;
+    else victoiresB += 1;
+  }
+
+  return {
+    cotes: {
+      A: enCote(victoiresA / NB_SIMULATIONS),
+      B: enCote(victoiresB / NB_SIMULATIONS),
+      nul: enCote(nuls / NB_SIMULATIONS),
+    },
+    victoiresA,
+    victoiresB,
+    nuls,
+    nbSimulations: NB_SIMULATIONS,
   };
 }
 
 /**
  * Points gagnés (positif) ou perdus (négatif) selon le pari.
  *
+ * La cote est celle enregistrée en base au moment du pari, pas une constante :
+ * un pari sur l'outsider rapporte davantage qu'un pari sur le favori.
+ *
  * @param betOnId objet sur lequel le joueur a misé, ou null pour le match nul
  * @param winnerId vainqueur du combat, ou null pour un match nul
  * @param amount mise engagée
+ * @param cote multiplicateur de la mise si le pari passe
  */
 export function computeBetDelta(
   betOnId: number | null,
   winnerId: number | null,
   amount: number,
+  cote: number,
 ): number {
   const pariGagnant = betOnId === winnerId;
 
-  if (!pariGagnant) return -amount;
-
-  return winnerId === null ? amount * COTE_NUL : amount * COTE_OBJET;
+  // bet_delta est une colonne entière : la cote a deux décimales, on arrondit.
+  return pariGagnant ? Math.round(amount * cote) : -amount;
 }

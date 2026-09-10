@@ -78,6 +78,57 @@ CREATE TABLE IF NOT EXISTS fights (
   CONSTRAINT combattants_differents CHECK (object_1_id <> object_2_id)
 );
 
+-- Cote appliquée au pari, figée au moment où il est placé.
+--
+-- Ajoutée après coup : ADD COLUMN IF NOT EXISTS permet de rejouer ce fichier
+-- sur une base déjà en service sans repartir de zéro.
+--
+-- Sans cette colonne, l'historique devait deviner la cote en divisant le gain
+-- par la mise — impossible pour un pari perdu, où le gain vaut toujours
+-- « moins la mise ». La figer ici garde aussi l'historique juste le jour où
+-- les cotes d'une paire sont resimulées.
+ALTER TABLE fights
+  ADD COLUMN IF NOT EXISTS bet_cote NUMERIC(6, 2) NOT NULL DEFAULT 0
+    CHECK (bet_cote >= 0);
+
+-- ---------------------------------------------------------------------------
+-- Cotes d'une paire d'objets (§4.2)
+--
+-- Une ligne par paire, remplie à la première rencontre : les trois cotes
+-- sortent de 500 combats simulés (voir simulerCotes dans lib/combat.ts), un
+-- calcul trop coûteux pour être refait à chaque affichage.
+--
+-- Une paire est NON ORIENTÉE : « marteau contre poêle » et « poêle contre
+-- marteau », c'est le même affrontement, et le moteur note chaque objet sans
+-- savoir qui est en face. La contrainte object_a_id < object_b_id impose donc
+-- un ordre unique de stockage — sans elle, la même paire pourrait exister deux
+-- fois avec des cotes différentes selon qui a été sélectionné en premier.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS pair_odds (
+  object_a_id     INTEGER      NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+  object_b_id     INTEGER      NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+
+  -- Multiplicateurs de mise, tels qu'affichés au joueur.
+  cote_a          NUMERIC(6, 2) NOT NULL CHECK (cote_a   > 0),
+  cote_b          NUMERIC(6, 2) NOT NULL CHECK (cote_b   > 0),
+  cote_nul        NUMERIC(6, 2) NOT NULL CHECK (cote_nul > 0),
+
+  -- Comptages bruts : ils permettent de relire les cotes affichées et de
+  -- vérifier sur combien de simulations elles reposent.
+  nb_simulations  INTEGER      NOT NULL CHECK (nb_simulations > 0),
+  nb_victoires_a  INTEGER      NOT NULL CHECK (nb_victoires_a >= 0),
+  nb_victoires_b  INTEGER      NOT NULL CHECK (nb_victoires_b >= 0),
+  nb_nuls         INTEGER      NOT NULL CHECK (nb_nuls        >= 0),
+
+  created_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+
+  PRIMARY KEY (object_a_id, object_b_id),
+  CONSTRAINT paire_ordonnee CHECK (object_a_id < object_b_id),
+  CONSTRAINT total_simulations CHECK (
+    nb_victoires_a + nb_victoires_b + nb_nuls = nb_simulations
+  )
+);
+
 -- ---------------------------------------------------------------------------
 -- Index : les tris et filtres réellement utilisés par les pages
 -- ---------------------------------------------------------------------------

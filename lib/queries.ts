@@ -2,9 +2,10 @@ import "server-only";
 
 import { cache } from "react";
 
-import { COTE_NUL, COTE_OBJET } from "@/lib/combat";
+import { simulerCotes } from "@/lib/combat";
 import { ConflictError, ValidationError, getSql } from "@/lib/db";
-import type { Object, Fight, Player, RankingSort, Stats } from "@/lib/types";
+import type { Cotes } from "@/lib/fight-engine";
+import type { Object, Fight, FightBet, Player, RankingSort, Stats } from "@/lib/types";
 
 /* ===========================================================================
    COUCHE D'ACCÈS AUX DONNÉES (Data Access Layer)
@@ -62,9 +63,21 @@ type FightRow = {
   bet_on_id: number | null;
   bet_amount: number;
   bet_delta: number;
+  /** NUMERIC : PostgreSQL le renvoie en chaîne, jamais en nombre. */
+  bet_cote: string | number;
   created_at: string | Date;
   fighter_a: ObjectRow;
   fighter_b: ObjectRow;
+};
+
+/** Une ligne de pair_odds : les cotes simulées d'une paire d'objets. */
+type PairOddsRow = {
+  object_a_id: number;
+  object_b_id: number;
+  cote_a: string | number;
+  cote_b: string | number;
+  cote_nul: string | number;
+  nb_simulations: number;
 };
 
 /** Colonnes des joueurs exposables à l'écran — password_hash est exclu. */
@@ -121,14 +134,31 @@ function toPlayer(row: UserRow): Player {
 function toFight(row: FightRow): Fight {
   const mise = row.bet_amount;
   const delta = row.bet_delta;
-  // La cote n'est pas stockée : on la reconstitue à partir du gain, sinon
-  // on retombe sur les multiplicateurs du moteur de combat.
-  const cote =
-    delta > 0 && mise > 0
-      ? Math.round((delta / mise) * 100) / 100
-      : row.bet_on_id == null
-        ? COTE_NUL
-        : COTE_OBJET;
+
+  // Une mise à 0 signifie « combat lancé sans pari » : c'est le cas de tous
+  // les combats de visiteurs, qui figurent malgré tout dans l'historique.
+  const bet: FightBet | null =
+    mise > 0
+      ? {
+          on: row.bet_on_id ?? "nul",
+          // La cote appliquée est enregistrée sur le combat (bet_cote).
+          //
+          // Le repli sur delta/mise ne sert qu'aux combats enregistrés avant
+          // l'ajout de la colonne, qui valent 0 par défaut. Il reste faux pour
+          // un pari perdu d'avant la migration — le gain n'y contient plus
+          // aucune trace de la cote — mais ces lignes finiront par sortir de
+          // l'historique.
+          cote:
+            Number(row.bet_cote) > 0
+              ? Number(row.bet_cote)
+              : delta > 0
+                ? Math.round((delta / mise) * 100) / 100
+                : 0,
+          amount: mise,
+          outcome: delta > 0 ? "gain" : delta < 0 ? "perte" : "nul",
+          delta,
+        }
+      : null;
 
   return {
     id: row.id,
@@ -137,13 +167,7 @@ function toFight(row: FightRow): Fight {
     winnerId: row.winner_id,
     pvA: row.score_1,
     pvB: row.score_2,
-    bet: {
-      on: row.bet_on_id ?? "nul",
-      amount: row.bet_amount,
-      cote: row.bet_amount === 0 ? 0 : Math.abs(row.bet_delta / row.bet_amount),
-      outcome: row.bet_delta > 0 ? "gain" : row.bet_delta < 0 ? "perte" : "nul",
-      delta: row.bet_delta,
-    },
+    bet,
     createdAt: toIsoDate(row.created_at),
   };
 }
@@ -347,6 +371,127 @@ export async function createObject(input: NewObjectInput): Promise<Object> {
 }
 
 /* ===========================================================================
+   COTES DES PAIRES
+
+   Les cotes viennent de 500 combats simulés (simulerCotes, lib/combat.ts).
+   Trop cher pour être refait à chaque affichage : on l'exécute une fois par
+   paire et on garde le résultat en base.
+   =========================================================================== */
+
+/**
+ * Remet une paire dans l'ordre de stockage (le plus petit identifiant d'abord).
+ *
+ * @returns les deux identifiants ordonnés, et `inverse` à true si l'appelant
+ *          les avait donnés dans l'autre sens — auquel cas les cotes A et B
+ *          devront être échangées avant de lui répondre.
+ */
+function ordonnerPaire(idA: number, idB: number) {
+  const premier = identifiantValide(idA, "idA");
+  const second = identifiantValide(idB, "idB");
+
+  if (premier === second) {
+    throw new ValidationError("Un objet ne peut pas s'affronter lui-même.");
+  }
+
+  const inverse = premier > second;
+
+  return {
+    petit: inverse ? second : premier,
+    grand: inverse ? premier : second,
+    inverse,
+  };
+}
+
+/** Traduit une ligne de pair_odds en cotes, dans le sens demandé. */
+function toCotes(row: PairOddsRow, inverse: boolean): Cotes {
+  const coteA = Number(row.cote_a);
+  const coteB = Number(row.cote_b);
+
+  return {
+    A: inverse ? coteB : coteA,
+    B: inverse ? coteA : coteB,
+    nul: Number(row.cote_nul),
+  };
+}
+
+async function lirePairOdds(petit: number, grand: number): Promise<PairOddsRow | null> {
+  const sql = getSql();
+
+  const rows = (await sql`
+    SELECT * FROM pair_odds
+    WHERE object_a_id = ${petit} AND object_b_id = ${grand}
+    LIMIT 1
+  `) as PairOddsRow[];
+
+  return rows[0] ?? null;
+}
+
+/**
+ * Cotes d'une paire d'objets, simulées à la première demande.
+ *
+ * Si la paire n'a jamais été rencontrée, on fait combattre les deux objets
+ * 500 fois et on enregistre les cotes obtenues : les appels suivants — et le
+ * paiement du pari dans POST /api/combats — liront la même ligne. Sans cela,
+ * la cote affichée au joueur et celle utilisée pour le payer seraient deux
+ * tirages différents.
+ *
+ * Volontairement non enveloppé dans cache() : la fonction écrit, et la
+ * mémoïsation de React masquerait le fait qu'un appel peut créer une ligne.
+ *
+ * @throws {ValidationError} si l'un des deux objets n'existe pas
+ */
+export async function getPairOdds(idA: number, idB: number): Promise<Cotes> {
+  const { petit, grand, inverse } = ordonnerPaire(idA, idB);
+
+  const existante = await lirePairOdds(petit, grand);
+
+  if (existante) return toCotes(existante, inverse);
+
+  const [objetPetit, objetGrand] = await Promise.all([
+    getObjectById(petit),
+    getObjectById(grand),
+  ]);
+
+  if (!objetPetit || !objetGrand) {
+    throw new ValidationError("L'un des deux objets n'existe pas.");
+  }
+
+  const simulation = simulerCotes(objetPetit, objetGrand);
+  const sql = getSql();
+
+  const rows = (await sql`
+    INSERT INTO pair_odds (
+      object_a_id, object_b_id,
+      cote_a, cote_b, cote_nul,
+      nb_simulations, nb_victoires_a, nb_victoires_b, nb_nuls
+    )
+    VALUES (
+      ${petit}, ${grand},
+      ${simulation.cotes.A}, ${simulation.cotes.B}, ${simulation.cotes.nul},
+      ${simulation.nbSimulations},
+      ${simulation.victoiresA}, ${simulation.victoiresB}, ${simulation.nuls}
+    )
+    ON CONFLICT (object_a_id, object_b_id) DO NOTHING
+    RETURNING *
+  `) as PairOddsRow[];
+
+  // Rien inséré : deux requêtes ont simulé la même paire neuve en même temps
+  // et l'autre a gagné la course. C'est sa ligne qui fait foi — la relire
+  // évite d'annoncer des cotes que la base ne contient pas.
+  if (!rows[0]) {
+    const gagnante = await lirePairOdds(petit, grand);
+
+    if (!gagnante) {
+      throw new Error("Les cotes de la paire n'ont pu être ni insérées ni relues.");
+    }
+
+    return toCotes(gagnante, inverse);
+  }
+
+  return toCotes(rows[0], inverse);
+}
+
+/* ===========================================================================
    COMBATS
    =========================================================================== */
 
@@ -354,7 +499,7 @@ export async function createObject(input: NewObjectInput): Promise<Object> {
 const SELECT_COMBATS = `
   SELECT
     f.id, f.winner_id, f.score_1, f.score_2,
-    f.bet_on_id, f.bet_amount, f.bet_delta, f.created_at,
+    f.bet_on_id, f.bet_amount, f.bet_delta, f.bet_cote, f.created_at,
     to_jsonb(a) AS fighter_a,
     to_jsonb(b) AS fighter_b
   FROM fights f
@@ -422,7 +567,8 @@ export const getFightById = cache(async (id: number): Promise<Fight | null> => {
 });
 
 export type NewFightInput = {
-  userId: number;
+  /** Auteur du combat, ou `null` pour un combat lancé par un visiteur. */
+  userId: number | null;
   object1Id: number;
   object2Id: number;
   /** null pour un match nul. */
@@ -434,13 +580,15 @@ export type NewFightInput = {
   betAmount: number;
   /** Points gagnés (positif) ou perdus (négatif) par le joueur. */
   betDelta: number;
+  /** Cote appliquée au pari, figée au moment où il est placé. 0 si sans pari. */
+  betCote: number;
 };
 
 /**
  * Enregistre un combat terminé et met à jour tout ce qui en découle :
  * le bilan des deux objets, puis les points et le compteur du joueur.
  *
- * Les quatre écritures partent dans une seule transaction : soit tout est
+ * Les écritures partent dans une seule transaction : soit tout est
  * enregistré, soit rien ne l'est. Sans cela, un incident réseau au milieu
  * laisserait par exemple des points crédités pour un combat inexistant.
  *
@@ -450,7 +598,7 @@ export type NewFightInput = {
 export async function createFight(input: NewFightInput): Promise<Fight> {
   const sql = getSql();
 
-  const userId = identifiantValide(input.userId, "userId");
+  const userId = input.userId === null ? null : identifiantValide(input.userId, "userId");
   const object1Id = identifiantValide(input.object1Id, "object1Id");
   const object2Id = identifiantValide(input.object2Id, "object2Id");
 
@@ -474,6 +622,16 @@ export async function createFight(input: NewFightInput): Promise<Fight> {
     throw new ValidationError("Le gain doit être un entier.");
   }
 
+  if (!Number.isFinite(input.betCote) || input.betCote < 0) {
+    throw new ValidationError("La cote doit être un nombre positif.");
+  }
+
+  // Un visiteur ne mise pas : accepter une mise sans auteur reviendrait à
+  // créditer ou débiter un compte qui n'existe pas.
+  if (userId === null && (input.betAmount > 0 || input.betOnId !== null)) {
+    throw new ValidationError("Un combat sans joueur ne peut pas porter de pari.");
+  }
+
   const winnerId = input.winnerId;
   const loserId =
     winnerId === null ? null : winnerId === object1Id ? object2Id : object1Id;
@@ -483,24 +641,30 @@ export async function createFight(input: NewFightInput): Promise<Fight> {
     sql`
       INSERT INTO fights (
         user_id, object_1_id, object_2_id, winner_id, score_1, score_2,
-        bet_on_id, bet_amount, bet_delta
+        bet_on_id, bet_amount, bet_delta, bet_cote
       )
       VALUES (
         ${userId}, ${object1Id}, ${object2Id}, ${winnerId},
         ${input.score1}, ${input.score2},
-        ${input.betOnId}, ${input.betAmount}, ${input.betDelta}
+        ${input.betOnId}, ${input.betAmount}, ${input.betDelta}, ${input.betCote}
       )
       RETURNING id
     `,
-    sql`
-      UPDATE users
-      SET points       = GREATEST(0, points + ${input.betDelta}),
-          max_points   = GREATEST(max_points, points + ${input.betDelta}),
-          nb_combats   = nb_combats + 1,
-          nb_victoires = nb_victoires + ${victoire ? 1 : 0}
-      WHERE id = ${userId}
-    `,
   ];
+
+  // Combat d'un visiteur : rien à créditer, aucun compteur de joueur à bouger.
+  if (userId !== null) {
+    requetes.push(
+      sql`
+        UPDATE users
+        SET points       = GREATEST(0, points + ${input.betDelta}),
+            max_points   = GREATEST(max_points, points + ${input.betDelta}),
+            nb_combats   = nb_combats + 1,
+            nb_victoires = nb_victoires + ${victoire ? 1 : 0}
+        WHERE id = ${userId}
+      `,
+    );
+  }
 
   // Match nul : aucun des deux objets ne voit son bilan bouger.
   if (winnerId !== null && loserId !== null) {

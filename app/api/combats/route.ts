@@ -7,6 +7,7 @@ import {
   getFightsByObject,
   getObjectById,
   getObjectBySlug,
+  getPairOdds,
   getPlayerById,
   getPlayerByIdFresh,
   getRecentFights,
@@ -49,9 +50,14 @@ export async function GET(request: Request): Promise<Response> {
  * {
  *   "object1Id": 1,
  *   "object2Id": 4,
- *   "betOn": 1,        // identifiant d'un des deux objets, ou "nul"
- *   "amount": 25       // mise en points
+ *   "betOn": 1,        // facultatif : identifiant d'un des deux objets, ou "nul"
+ *   "amount": 25       // facultatif : mise en points
  * }
+ *
+ * Tout le monde peut lancer un combat, connecté ou non, et tous les combats
+ * sont enregistrés : l'historique est le même pour tous. Le pari, lui, est
+ * réservé aux comptes — c'est la seule différence entre un visiteur et un
+ * joueur inscrit. Un combat sans « betOn »/« amount » est enregistré sans mise.
  *
  * Le client choisit les combattants, la mise et le pari — rien de plus. Les
  * scores, le vainqueur et le gain sont calculés ici : les recevoir du
@@ -61,16 +67,9 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const body = await readJsonBody(request);
 
-    // L'identifiant du joueur vient de la session, jamais du corps de la requête.
+    // L'identifiant du joueur vient de la session, jamais du corps de la
+    // requête. null = visiteur : le combat aura lieu, mais sans pari.
     const playerId = await getCurrentPlayerId();
-
-    if (playerId === null) {
-      return apiError(
-        401,
-        "NON_AUTHENTIFIE",
-        "Connectez-vous pour lancer un combat et miser des points.",
-      );
-    }
 
     const { object1Id, object2Id, betOn, amount } = body;
 
@@ -82,45 +81,78 @@ export async function POST(request: Request): Promise<Response> {
       throw new ValidationError("Un objet ne peut pas s'affronter lui-même.");
     }
 
-    if (!Number.isInteger(amount) || (amount as number) <= 0) {
+    // Un pari est engagé dès qu'un des deux champs est renseigné. Les exiger
+    // ensemble évite d'enregistrer une mise sans camp, ou l'inverse.
+    const parie = betOn !== undefined || (amount !== undefined && amount !== null);
+
+    if (parie && playerId === null) {
+      return apiError(
+        401,
+        "NON_AUTHENTIFIE",
+        "Connectez-vous pour miser des points sur un combat.",
+      );
+    }
+
+    if (parie && betOn === undefined) {
+      throw new ValidationError("Précisez le camp sur lequel porte la mise.");
+    }
+
+    if (parie && (!Number.isInteger(amount) || (amount as number) <= 0)) {
       throw new ValidationError("La mise doit être un entier strictement positif.");
     }
 
-    const mise = amount as number;
-
     // « nul » ou l'identifiant d'un des deux combattants, rien d'autre.
-    if (betOn !== "nul" && betOn !== object1Id && betOn !== object2Id) {
+    if (parie && betOn !== "nul" && betOn !== object1Id && betOn !== object2Id) {
       throw new ValidationError(
         "Le pari doit porter sur l'un des deux objets, ou valoir « nul ».",
       );
     }
 
-    const betOnId = betOn === "nul" ? null : (betOn as number);
+    const mise = parie ? (amount as number) : 0;
+    const betOnId = parie && betOn !== "nul" ? (betOn as number) : null;
 
     const [objetA, objetB, joueur] = await Promise.all([
       getObjectById(object1Id as number),
       getObjectById(object2Id as number),
-      getPlayerById(playerId),
+      playerId === null ? null : getPlayerById(playerId),
     ]);
 
     if (!objetA || !objetB) {
       return apiError(404, "INTROUVABLE", "L'un des deux objets n'existe pas.");
     }
 
-    if (!joueur) {
+    if (playerId !== null && !joueur) {
       // Session valide mais compte disparu depuis.
       return apiError(401, "NON_AUTHENTIFIE", "Ce compte n'existe plus.");
     }
 
     // On ne peut pas miser plus de points qu'on n'en possède.
-    if (mise > joueur.points) {
+    if (joueur && mise > joueur.points) {
       throw new ValidationError(
         `Mise de ${mise} points impossible : vous en avez ${joueur.points}.`,
       );
     }
 
+    // Cotes de la paire, simulées à sa première rencontre puis relues en base.
+    // C'est la ligne que GET /api/cotes a déjà servie au navigateur avant le
+    // pari : le joueur est payé exactement à la cote qu'on lui a annoncée.
+    // Un combat sans pari passe par ici lui aussi, pour que toute paire jouée
+    // finisse enregistrée.
+    const cotes = await getPairOdds(objetA.id, objetB.id);
+
+    // Cote de l'issue choisie. « A » désigne object1Id, « B » object2Id.
+    const coteDuPari = !parie
+      ? 0
+      : betOnId === null
+        ? cotes.nul
+        : betOnId === objetA.id
+          ? cotes.A
+          : cotes.B;
+
     const resultat = resolveFight(objetA, objetB);
-    const delta = computeBetDelta(betOnId, resultat.winnerId, mise);
+    const delta = parie
+      ? computeBetDelta(betOnId, resultat.winnerId, mise, coteDuPari)
+      : 0;
 
     const combat = await createFight({
       userId: playerId,
@@ -132,10 +164,11 @@ export async function POST(request: Request): Promise<Response> {
       betOnId,
       betAmount: mise,
       betDelta: delta,
+      betCote: coteDuPari,
     });
 
     return Response.json(
-      { combat, joueur: await getPlayerByIdFresh(playerId) },
+      { combat, joueur: playerId === null ? null : await getPlayerByIdFresh(playerId) },
       { status: 201, headers: { Location: `/api/combats/${combat.id}` } },
     );
   } catch (error) {

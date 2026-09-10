@@ -5,6 +5,7 @@ import { useState } from "react";
 import { FightRow } from "@/components/fight-row";
 import { Panel } from "@/components/ui";
 import { useGame } from "@/lib/game-store";
+import { Fight } from "@/lib/types";
 
 type Filtre = "tous" | "gain" | "perte";
 
@@ -18,8 +19,8 @@ const FILTRES: { key: Filtre; label: string }[] = [
 export function HistoriqueResume({ fights: fightsProp }: { fights?: Fight[] } = {}) {
   const { fights: fightsStore } = useGame();
   const fights = fightsProp ?? fightsStore;
-  const nbGains = fights.filter((fight) => fight.bet.outcome === "gain").length;
-  const nbPertes = fights.filter((fight) => fight.bet.outcome === "perte").length;
+  const nbGains = fights.filter((fight) => fight.bet?.outcome === "gain").length;
+  const nbPertes = fights.filter((fight) => fight.bet?.outcome === "perte").length;
 
   return (
     <dl className="mb-10 grid gap-3 sm:grid-cols-3">
@@ -72,7 +73,7 @@ export function HistoryList({
     );
   }
   if (filtre !== "tous") {
-    liste = liste.filter((fight) => fight.bet.outcome === filtre);
+    liste = liste.filter((fight) => fight.bet?.outcome === filtre);
   }
   if (limit != null) {
     liste = liste.slice(0, limit);

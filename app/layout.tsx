@@ -4,9 +4,8 @@ import { Anton, Geist, Geist_Mono } from "next/font/google";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { getCurrentPlayer } from "@/lib/auth";
-import { getRanking, getRecentFights } from "@/lib/queries";
+import { getAllObjects, getRanking, getRecentFights } from "@/lib/queries";
 import { GameProvider } from "@/lib/game-store";
-import { chargerClassement, chargerDonneesCompte } from "@/lib/vue-data";
 
 import "./globals.css";
 
@@ -58,9 +57,10 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   //
   // Le classement et les derniers combats amorcent le store de jeu, dont
   // dépendent l'en-tête, l'accueil, l'historique et le profil.
-  const [joueur, joueurs, combats] = await Promise.all([
+  const [joueur, joueurs, combattants, combats] = await Promise.all([
     getCurrentPlayer(),
     getRanking(),
+    getAllObjects(),
     getRecentFights(),
   ]);
 
@@ -70,7 +70,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} ${anton.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-void">
-        <GameProvider joueur={joueur} joueurs={joueurs} fightsInitiaux={combats}>
+        <GameProvider
+          joueur={joueur}
+          joueurs={joueurs}
+          combatants={combattants}
+          fightsInitiaux={combats}
+        >
           <a
             href="#contenu"
             className="sr-only focus:not-sr-only focus:absolute focus:top-3 focus:left-3 focus:z-100 focus:bg-arcade-gold focus:px-4 focus:py-2 focus:font-bold focus:text-void"

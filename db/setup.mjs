@@ -19,7 +19,7 @@ import { Client } from "@neondatabase/serverless";
 
 const dossier = dirname(fileURLToPath(import.meta.url));
 
-const NOS_TABLES = ["objects", "users", "fights"];
+const NOS_TABLES = ["objects", "users", "fights", "pair_odds"];
 
 const args = process.argv.slice(2);
 const force = args.includes("--force");

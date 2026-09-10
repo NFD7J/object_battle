@@ -54,6 +54,22 @@ export type Object = {
 /** Issue d'un combat du point de vue du pari de l'utilisateur. */
 export type BetOutcome = "gain" | "perte" | "nul";
 
+/**
+ * Pari d'un joueur sur un combat.
+ *
+ * Seul un joueur connecté peut parier : un combat lancé par un visiteur est
+ * enregistré dans l'historique avec `bet` à `null`.
+ */
+export type FightBet = {
+  /** Objet sur lequel la mise porte, ou « nul » pour le match nul. */
+  on: number | "nul";
+  amount: number;
+  cote: number;
+  outcome: BetOutcome;
+  /** Points gagnés (positif) ou perdus (négatif). */
+  delta: number;
+};
+
 /** Un combat passé, c'est-à-dire une ligne de la table « fights ». */
 export type Fight = {
   id: number;
@@ -65,14 +81,8 @@ export type Fight = {
   pvA: number;
   /** PV restants du combattant B à la fin (0 = K.O.). */
   pvB: number;
-  /** Points misés, cote retenue, puis gagnés (+) ou perdus (-) par l'utilisateur. */
-  bet: {
-    on: number | "nul";
-    amount: number;
-    cote: number;
-    outcome: BetOutcome;
-    delta: number;
-  };
+  /** Pari engagé sur ce combat, ou `null` si le combat a été lancé sans pari. */
+  bet: FightBet | null;
   createdAt: string;
 };
 

@@ -7,9 +7,9 @@ import { HistoryList } from "@/components/history-list";
 import { PlayerAvatar } from "@/components/ranking-table";
 import { Panel, PageHeader, SectionTitle, Tag, btn, btnLabel } from "@/components/ui";
 import { useJoueur, useJoueurs } from "@/lib/game-store";
-import type { Combatant } from "@/lib/types";
+import type { Object } from "@/lib/types";
 
-export function ProfilView({ objets }: { objets: Combatant[] }) {
+export function ProfilView({ objets }: { objets: Object[] }) {
   const joueur = useJoueur();
   const joueurs = useJoueurs();
 
